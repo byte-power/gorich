@@ -2,7 +2,7 @@ package task
 
 import (
 	"errors"
-	"fmt"
+	"log"
 	"reflect"
 	"time"
 )
@@ -44,12 +44,7 @@ func (scheduler *Scheduler) AddPeriodicJob(name string, function interface{}, pa
 }
 
 func (scheduler *Scheduler) AddRunOnceJob(name string, function interface{}, params ...interface{}) *OnceJob {
-	job := &OnceJob{
-		name:     name,
-		function: function,
-		params:   params,
-		delay:    0,
-	}
+	job := NewOnceJob(name, function, params)
 	scheduler.jobs[name] = job
 	return job
 }
@@ -65,34 +60,32 @@ func (scheduler *Scheduler) getRunnableJobs(t time.Time) []Job {
 }
 
 func (scheduler *Scheduler) Start() {
-	fmt.Println("start scheduler")
-	go scheduler.startWorkers(scheduler.concurrentWorkerCount)
+	go scheduler.startWorkers()
 	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case tickerTime := <-ticker.C:
 			scheduler.QueueRunnableJobs(tickerTime)
 		}
-		fmt.Println("finish for in Start")
 	}
 }
 
 func (scheduler *Scheduler) QueueRunnableJobs(t time.Time) {
 	runnableJobs := scheduler.getRunnableJobs(t)
 	for _, job := range runnableJobs {
+		log.Printf("queue runnable job:%s\n", job.Name())
 		scheduler.queue <- job
 		job.ScheduledAt(t)
 	}
 }
 
-func (scheduler *Scheduler) startWorkers(count int) {
-	fmt.Println("start workers")
+func (scheduler *Scheduler) startWorkers() {
 	for {
 		select {
 		case job := <-scheduler.queue:
+			log.Printf("run job:%s\n", job.Name())
 			go job.Run()
 		}
-		fmt.Println("finish for loop in startWorkers")
 	}
 }
 
@@ -104,7 +97,12 @@ func Periodic(name string, function interface{}, params ...interface{}) *Periodi
 	return defaultScheduler.AddPeriodicJob(name, function, params)
 }
 
+func Start() {
+	defaultScheduler.Start()
+}
+
 type Job interface {
+	Name() string
 	IsRunnable(time.Time) bool
 	ScheduledAt(time.Time)
 	Run()
@@ -115,20 +113,50 @@ type OnceJob struct {
 	function      interface{}
 	params        []interface{}
 	delay         time.Duration
+	runnable      bool
+	timer         *time.Timer
+	scheduled     bool
 	scheduledTime time.Time
+}
+
+func NewOnceJob(name string, function interface{}, params ...interface{}) *OnceJob {
+	job := &OnceJob{
+		name:     name,
+		function: function,
+		params:   params,
+		delay:    0,
+		runnable: true,
+	}
+	return job
+}
+
+func (job *OnceJob) Name() string {
+	return job.name
 }
 
 func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 	job.delay = delay
+	job.runnable = false
+	if job.timer != nil {
+		job.timer.Stop()
+	}
+	go job.waitUntilRunnable()
 	return job
 }
 
+func (job *OnceJob) waitUntilRunnable() {
+	job.timer = time.NewTimer(job.delay)
+	<-job.timer.C
+	job.runnable = true
+}
+
 func (job *OnceJob) IsRunnable(t time.Time) bool {
-	return true
+	return job.runnable && !job.scheduled
 }
 
 func (job *OnceJob) ScheduledAt(t time.Time) {
 	job.scheduledTime = t
+	job.scheduled = true
 }
 
 func (job *OnceJob) Run() {
@@ -143,24 +171,30 @@ type PeriodicJob struct {
 	scheduledTime time.Time
 }
 
+func (job *PeriodicJob) Name() string {
+	return job.name
+}
+
 func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 	at := getAtTime(job.cron.intervalType, t)
-	var isReady bool
+	var isRunnable bool
 	// scheduledTime.IsZero == true if the job has not been sheduled yet.
 	if job.scheduledTime.IsZero() {
 		if (job.cron.at == 0) || (at == job.cron.at) {
-			isReady = true
+			isRunnable = true
 		} else {
-			isReady = false
+			isRunnable = false
 		}
 	} else {
-		if job.scheduledTime.Add(job.cron.Duration()) == t {
-			isReady = true
+		roundScheduledTime := job.scheduledTime.Truncate(time.Second)
+		roundCurrentTime := t.Truncate(time.Second)
+		if !roundCurrentTime.Before(roundScheduledTime.Add(job.cron.IntervalDuration())) {
+			isRunnable = true
 		} else {
-			isReady = false
+			isRunnable = false
 		}
 	}
-	return isReady
+	return isRunnable
 }
 
 func (job *PeriodicJob) ScheduledAt(t time.Time) {
@@ -191,6 +225,27 @@ func (job *PeriodicJob) EveryDays(day int) *PeriodicJob {
 	return job
 }
 
+func (job *PeriodicJob) AtHourInDay(hour, minute, second int) (*PeriodicJob, error) {
+	if err := job.cron.AtHourInDay(hour, minute, second); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
+func (job *PeriodicJob) AtMinuteInHour(minute, second int) (*PeriodicJob, error) {
+	if err := job.cron.AtMinuteInHour(minute, second); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
+func (job *PeriodicJob) AtSecondInMinute(second int) (*PeriodicJob, error) {
+	if err := job.cron.AtSecondInMinute(second); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 func getAtTime(intervalType IntervalType, t time.Time) time.Duration {
 	var at time.Duration
 	switch intervalType {
@@ -217,14 +272,16 @@ func (job *PeriodicJob) Run() {
 	callJobFuncWithParams(job.function, job.params)
 }
 
-type Queue interface{}
+var ErrNotFunctionType = errors.New("job's function is not function type")
+var ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
 
-type Worker interface{}
-
-func callJobFuncWithParams(jobFunc interface{}, params []interface{}) ([]reflect.Value, error) {
-	f := reflect.ValueOf(jobFunc)
+func callJobFuncWithParams(function interface{}, params []interface{}) ([]reflect.Value, error) {
+	if reflect.TypeOf(function).Kind() != reflect.Func {
+		return nil, ErrNotFunctionType
+	}
+	f := reflect.ValueOf(function)
 	if len(params) != f.Type().NumIn() {
-		return nil, errors.New("error")
+		return nil, ErrFunctionArityNotMatch
 	}
 	in := make([]reflect.Value, len(params))
 	for k, param := range params {
@@ -233,18 +290,6 @@ func callJobFuncWithParams(jobFunc interface{}, params []interface{}) ([]reflect
 	return f.Call(in), nil
 }
 
-// scheduler = NewScheduler
-// scheduler.Every(time.Duration(100days)).Do(job)
-// scheduler.EveryDay(2).At().Do(job)
-// scheduler.EveryMonday()
-// scheduler.EveryMonday(2).At().Do(job)
-// scheduler.AddJob(job, task.Every(time.Duration).At())
-
-// EveryMinutes(2).AtSeconds(second)
-// EveryHours(2).AtMinute(minute)
-// EveryDays(2).AtHour(hour).Withtimezone
-// EveryWeek(2).AtWeekday(Monday).AtHour(hour)
-// EveryMonth(2).AtDateOfMonth().AtHour(hour)
 type IntervalType string
 
 const (
@@ -294,20 +339,20 @@ func EveryDays(day int) *Cron {
 
 var ErrTimeRange = errors.New("time range is invalid")
 
-func (cron *Cron) AtHourInDay(hour, minute, second int) (*Cron, error) {
+func (cron *Cron) AtHourInDay(hour, minute, second int) error {
 	if !isValidHour(hour) || !isValidMinute(minute) && !isValidSecond(second) {
-		return nil, ErrTimeRange
+		return ErrTimeRange
 	}
 	cron.at = time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute + time.Duration(second)*time.Second
-	return cron, nil
+	return nil
 }
 
-func (cron *Cron) AtMinuteInHour(minute, second int) (*Cron, error) {
+func (cron *Cron) AtMinuteInHour(minute, second int) error {
 	if !isValidMinute(minute) || !isValidSecond(second) {
-		return nil, ErrTimeRange
+		return ErrTimeRange
 	}
 	cron.at = time.Duration(minute)*time.Minute + time.Duration(second)*time.Second
-	return cron, nil
+	return nil
 }
 
 func (cron *Cron) AtSecondInMinute(second int) error {
@@ -318,7 +363,7 @@ func (cron *Cron) AtSecondInMinute(second int) error {
 	return nil
 }
 
-func (cron *Cron) Duration() time.Duration {
+func (cron *Cron) IntervalDuration() time.Duration {
 	var duration time.Duration
 	switch cron.intervalType {
 	case intervalWeek:
