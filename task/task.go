@@ -2,14 +2,17 @@ package task
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"reflect"
+	"sync"
 	"time"
 )
 
 const (
 	defaultConcurrentWorkerCount = 100
 	defaultQueueSize             = 500
+	maxStatsCount                = 100
 )
 
 var defaultScheduler = NewScheduler(defaultQueueSize, defaultConcurrentWorkerCount)
@@ -60,52 +63,69 @@ func (scheduler *Scheduler) getRunnableJobs(t time.Time) []Job {
 }
 
 func (scheduler *Scheduler) Start() {
-	go scheduler.startWorkers()
 	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
 		case tickerTime := <-ticker.C:
-			scheduler.QueueRunnableJobs(tickerTime)
+			scheduler.runJobs(tickerTime)
 		}
 	}
 }
 
-func (scheduler *Scheduler) QueueRunnableJobs(t time.Time) {
+func (scheduler *Scheduler) runJobs(t time.Time) {
 	runnableJobs := scheduler.getRunnableJobs(t)
 	for _, job := range runnableJobs {
-		log.Printf("queue runnable job:%s\n", job.Name())
-		scheduler.queue <- job
 		job.ScheduledAt(t)
+		go job.Run(t)
 	}
 }
 
-func (scheduler *Scheduler) startWorkers() {
-	for {
-		select {
-		case job := <-scheduler.queue:
-			log.Printf("run job:%s\n", job.Name())
-			go job.Run()
-		}
+func (scheduler *Scheduler) JobStats() map[string][]JobStat {
+	jobStats := make(map[string][]JobStat, len(scheduler.jobs))
+	for name, job := range scheduler.jobs {
+		jobStats[name] = job.Stats()
 	}
+	return jobStats
 }
 
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
-	return defaultScheduler.AddRunOnceJob(name, function, params)
+	return defaultScheduler.AddRunOnceJob(name, function, params...)
 }
 
 func Periodic(name string, function interface{}, params ...interface{}) *PeriodicJob {
-	return defaultScheduler.AddPeriodicJob(name, function, params)
+	return defaultScheduler.AddPeriodicJob(name, function, params...)
 }
 
 func Start() {
 	defaultScheduler.Start()
 }
 
+func JobStats() map[string][]JobStat {
+	return defaultScheduler.JobStats()
+}
+
+type JobStat struct {
+	IsSuccess     bool
+	Err           error
+	RunDuration   time.Duration
+	ScheduledTime time.Time
+}
+
+func (stat JobStat) ToMap() map[string]interface{} {
+	return map[string]interface{}{
+		"success":       stat.IsSuccess,
+		"error":         stat.Err,
+		"run_duration":  stat.RunDuration,
+		"scheduledTime": stat.ScheduledTime,
+	}
+}
+
 type Job interface {
 	Name() string
 	IsRunnable(time.Time) bool
 	ScheduledAt(time.Time)
-	Run()
+	Run(time.Time)
+	Stats() []JobStat
 }
 
 type OnceJob struct {
@@ -117,6 +137,8 @@ type OnceJob struct {
 	timer         *time.Timer
 	scheduled     bool
 	scheduledTime time.Time
+	jobStats      []JobStat
+	jobStatLock   sync.Mutex
 }
 
 func NewOnceJob(name string, function interface{}, params ...interface{}) *OnceJob {
@@ -132,6 +154,10 @@ func NewOnceJob(name string, function interface{}, params ...interface{}) *OnceJ
 
 func (job *OnceJob) Name() string {
 	return job.name
+}
+
+func (job *OnceJob) Stats() []JobStat {
+	return job.jobStats
 }
 
 func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
@@ -159,8 +185,22 @@ func (job *OnceJob) ScheduledAt(t time.Time) {
 	job.scheduled = true
 }
 
-func (job *OnceJob) Run() {
-	callJobFuncWithParams(job.function, job.params)
+func (job *OnceJob) Run(t time.Time) {
+	log.Printf("run job: %s\n", job.name)
+	startTime := time.Now()
+	stat := runJobFunctionAndGetJobStat(job.function, job.params)
+	stat.RunDuration = time.Now().Sub(startTime)
+	stat.ScheduledTime = t
+	job.addStat(stat)
+}
+
+func (job *OnceJob) addStat(stat JobStat) {
+	job.jobStatLock.Lock()
+	defer job.jobStatLock.Unlock()
+	job.jobStats = append(job.jobStats, stat)
+	if len(job.jobStats) > maxStatsCount {
+		job.jobStats = job.jobStats[len(job.jobStats)-maxStatsCount:]
+	}
 }
 
 type PeriodicJob struct {
@@ -169,10 +209,16 @@ type PeriodicJob struct {
 	params        []interface{}
 	cron          *Cron
 	scheduledTime time.Time
+	jobStats      []JobStat
+	jobStatLock   sync.Mutex
 }
 
 func (job *PeriodicJob) Name() string {
 	return job.name
+}
+
+func (job *PeriodicJob) Stats() []JobStat {
+	return job.jobStats
 }
 
 func (job *PeriodicJob) IsRunnable(t time.Time) bool {
@@ -181,7 +227,15 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 	// scheduledTime.IsZero == true if the job has not been sheduled yet.
 	if job.scheduledTime.IsZero() {
 		if (job.cron.at == 0) || (at == job.cron.at) {
-			isRunnable = true
+			if job.cron.intervalType == intervalWeek {
+				if job.cron.weekDay == t.Weekday() {
+					isRunnable = true
+				} else {
+					isRunnable = false
+				}
+			} else {
+				isRunnable = true
+			}
 		} else {
 			isRunnable = false
 		}
@@ -222,6 +276,55 @@ func (job *PeriodicJob) EveryHours(hour int) *PeriodicJob {
 func (job *PeriodicJob) EveryDays(day int) *PeriodicJob {
 	job.cron.intervalType = intervalDay
 	job.cron.interval = day
+	return job
+}
+
+func (job *PeriodicJob) EveryMondays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Monday
+	return job
+}
+
+func (job *PeriodicJob) EveryTuesdays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Tuesday
+	return job
+}
+
+func (job *PeriodicJob) EveryWednesdays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Wednesday
+	return job
+}
+
+func (job *PeriodicJob) EveryThursdays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Thursday
+	return job
+}
+
+func (job *PeriodicJob) EveryFridays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Friday
+	return job
+}
+
+func (job *PeriodicJob) EverySaturdays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Saturday
+	return job
+}
+
+func (job *PeriodicJob) EverySundays(week int) *PeriodicJob {
+	job.cron.intervalType = intervalWeek
+	job.cron.interval = week
+	job.cron.weekDay = time.Sunday
 	return job
 }
 
@@ -268,26 +371,73 @@ func getAtTime(intervalType IntervalType, t time.Time) time.Duration {
 	return at
 }
 
-func (job *PeriodicJob) Run() {
-	callJobFuncWithParams(job.function, job.params)
+func (job *PeriodicJob) Run(t time.Time) {
+	log.Printf("run job: %s\n", job.name)
+	startTime := time.Now()
+	stat := runJobFunctionAndGetJobStat(job.function, job.params)
+	stat.RunDuration = time.Now().Sub(startTime)
+	stat.ScheduledTime = t
+	job.addStat(stat)
+}
+
+func interfaceToError(i interface{}) error {
+	var err error
+	switch v := i.(type) {
+	case error:
+		err = v
+	case nil:
+		err = nil
+	default:
+		err = fmt.Errorf("%+v", v)
+	}
+	return err
+}
+
+func (job *PeriodicJob) addStat(stat JobStat) {
+	job.jobStatLock.Lock()
+	defer job.jobStatLock.Unlock()
+	job.jobStats = append(job.jobStats, stat)
+	if len(job.jobStats) > maxStatsCount {
+		job.jobStats = job.jobStats[len(job.jobStats)-maxStatsCount:]
+	}
 }
 
 var ErrNotFunctionType = errors.New("job's function is not function type")
 var ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
 
-func callJobFuncWithParams(function interface{}, params []interface{}) ([]reflect.Value, error) {
+func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) JobStat {
+	stat := JobStat{
+		IsSuccess: true,
+	}
+
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			stat.IsSuccess = false
+			stat.Err = interfaceToError(recovered)
+		}
+	}()
+
 	if reflect.TypeOf(function).Kind() != reflect.Func {
-		return nil, ErrNotFunctionType
+		stat.IsSuccess = false
+		stat.Err = ErrNotFunctionType
 	}
 	f := reflect.ValueOf(function)
 	if len(params) != f.Type().NumIn() {
-		return nil, ErrFunctionArityNotMatch
+		stat.IsSuccess = false
+		stat.Err = ErrFunctionArityNotMatch
 	}
 	in := make([]reflect.Value, len(params))
 	for k, param := range params {
 		in[k] = reflect.ValueOf(param)
 	}
-	return f.Call(in), nil
+	jobResults := f.Call(in)
+	for _, result := range jobResults {
+		if err, ok := result.Interface().(error); ok {
+			stat.IsSuccess = false
+			stat.Err = err
+		}
+	}
+	return stat
 }
 
 type IntervalType string
@@ -304,6 +454,7 @@ const (
 type Cron struct {
 	interval     int
 	intervalType IntervalType
+	weekDay      time.Weekday
 	at           time.Duration
 	timezone     *time.Location
 }
