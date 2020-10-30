@@ -1,12 +1,15 @@
 package task
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
 const (
@@ -87,6 +90,80 @@ func (scheduler *Scheduler) JobStats() map[string][]JobStat {
 	}
 	return jobStats
 }
+
+type Coordinator struct {
+	name        string
+	redisClient *redis.Client
+}
+
+func NewCoordinator(name string, address string) *Coordinator {
+	redisClient := redis.NewClient(&redis.Options{Addr: address})
+	return &Coordinator{name: name, redisClient: redisClient}
+}
+
+func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextScheduledTime time.Time) {
+	key := fmt.Sprintf("task:%s:%s", coordinator.name, name)
+	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
+	nextScheduledTs := nextScheduledTime.Truncate(time.Second).Unix()
+	fmt.Printf("scheduled_ts:%d, next_scheduled_ts:%d\n", scheduledTs, nextScheduledTs)
+	script := `
+		local key = KEYS[1]
+		local current_scheduled_ts = ARGV[1]
+		local next_scheduled_ts = ARGV[2]
+		local table = redis.call("HGETALL", key) 
+		local can_be_scheduled = 1
+		local scheduled_time = current_scheduled_ts
+		if next(table) == nil then 
+			redis.call("HMSET", key, "current_scheduled_ts", current_scheduled_ts, "next_scheduled_ts", next_scheduled_ts)
+			redis.call("EXPIREAT", key, next_scheduled_ts)
+		else
+			local key1 = table[1]
+			local value1 = table[2]
+			local key2 = table[3]
+			local value2 = table[4]
+			local scheduled_info_table = {}
+			scheduled_info_table[key1] = value1
+			scheduled_info_table[key2] = value2
+			local recorded_next_ts = tonumber(scheduled_info_table["next_scheduled_ts"])
+			if recorded_next_ts <= tonumber(current_scheduled_ts) then
+				redis.call("HMSET", key, "current_scheduled_ts", current_scheduled_ts, "next_scheduled_ts", next_scheduled_ts)
+				redis.call("EXPIREAT", key, next_scheduled_ts)
+			else
+				scheduled_time = scheduled_info_table["current_scheduled_ts"]
+				can_be_scheduled = 0
+			end
+		end
+		return {can_be_scheduled, scheduled_time}
+	`
+	redisScript := redis.NewScript(script)
+	result, err := redisScript.Run(
+		context.Background(),
+		coordinator.redisClient, []string{key},
+		scheduledTs,
+		nextScheduledTs).Result()
+
+	canBeScheduled := result.([]interface{})[0].(int64)
+	scheduledAt := result.([]interface{})[1].(string)
+	fmt.Println(result, canBeScheduled, scheduledAt, err, err == nil)
+}
+
+func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
+	job.coordinator = coordinator
+	return job
+}
+
+// func test() {
+// 	key := "task:coname:jobname"
+// 	scheduledTime := time.Now().Truncate(time.Second)
+// 	nextScheduledTime := time.Now()
+// 	x := redis.hgetall(key)
+// 	if x && x.next_scheduled_time <= scheduledTime || !x {
+// 		redis.hmset(key, scheduledTime, nextScheduledTime)
+// 		redis.expireAt(key, nextScheduledTime)
+// 	}
+// 	return scheduledTime
+// 	setScheduledTime(scheduledTime)
+// }
 
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
 	return defaultScheduler.AddRunOnceJob(name, function, params...)
@@ -211,6 +288,7 @@ type PeriodicJob struct {
 	scheduledTime time.Time
 	jobStats      []JobStat
 	jobStatLock   sync.Mutex
+	coordinator   *Coordinator
 }
 
 func (job *PeriodicJob) Name() string {
@@ -254,6 +332,13 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 func (job *PeriodicJob) ScheduledAt(t time.Time) {
 	job.scheduledTime = t
 }
+
+// func (job *PeriodicJob) NextRunTime(tickTime time.Time) time.Time {
+// 	if job.scheduledTime.IsZero() {
+// 		return tickTime.Truncate(time.Second)
+// 	}
+// 	return job.scheduledTime.Add(job.cron.IntervalDuration()).Truncate(time.Second)
+// }
 
 func (job *PeriodicJob) EverySeconds(second int) *PeriodicJob {
 	job.cron.intervalType = intervalSecond
