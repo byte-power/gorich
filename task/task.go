@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
@@ -101,12 +102,11 @@ func NewCoordinator(name string, address string) *Coordinator {
 	return &Coordinator{name: name, redisClient: redisClient}
 }
 
-func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextScheduledTime time.Time) {
-	key := fmt.Sprintf("task:%s:%s", coordinator.name, name)
-	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
-	nextScheduledTs := nextScheduledTime.Truncate(time.Second).Unix()
-	fmt.Printf("scheduled_ts:%d, next_scheduled_ts:%d\n", scheduledTs, nextScheduledTs)
-	script := `
+func newCoordinateError(err error) error {
+	return fmt.Errorf("coordinate error:%w", err)
+}
+
+const coordinateScript = `
 		local key = KEYS[1]
 		local current_scheduled_ts = ARGV[1]
 		local next_scheduled_ts = ARGV[2]
@@ -135,35 +135,34 @@ func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextSchedu
 		end
 		return {can_be_scheduled, scheduled_time}
 	`
-	redisScript := redis.NewScript(script)
+
+func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextScheduledTime time.Time) (bool, time.Time, error) {
+	key := fmt.Sprintf("gorich:task:%s:%s", coordinator.name, name)
+	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
+	nextScheduledTs := nextScheduledTime.Truncate(time.Second).Unix()
+	log.Printf("scheduled_ts:%d, next_scheduled_ts:%d\n", scheduledTs, nextScheduledTs)
+
+	redisScript := redis.NewScript(coordinateScript)
 	result, err := redisScript.Run(
 		context.Background(),
 		coordinator.redisClient, []string{key},
 		scheduledTs,
 		nextScheduledTs).Result()
-
-	canBeScheduled := result.([]interface{})[0].(int64)
-	scheduledAt := result.([]interface{})[1].(string)
-	fmt.Println(result, canBeScheduled, scheduledAt, err, err == nil)
+	if err != nil {
+		return false, time.Time{}, err
+	}
+	canBeScheduled := result.([]interface{})[0].(int64) == 1
+	scheduledAt, err := strconv.ParseInt(result.([]interface{})[1].(string), 10, 64)
+	if err != nil {
+		return false, time.Time{}, newCoordinateError(err)
+	}
+	return canBeScheduled, time.Unix(scheduledAt, 0), nil
 }
 
 func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
 	job.coordinator = coordinator
 	return job
 }
-
-// func test() {
-// 	key := "task:coname:jobname"
-// 	scheduledTime := time.Now().Truncate(time.Second)
-// 	nextScheduledTime := time.Now()
-// 	x := redis.hgetall(key)
-// 	if x && x.next_scheduled_time <= scheduledTime || !x {
-// 		redis.hmset(key, scheduledTime, nextScheduledTime)
-// 		redis.expireAt(key, nextScheduledTime)
-// 	}
-// 	return scheduledTime
-// 	setScheduledTime(scheduledTime)
-// }
 
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
 	return defaultScheduler.AddRunOnceJob(name, function, params...)
@@ -325,6 +324,20 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 		} else {
 			isRunnable = false
 		}
+	}
+	if isRunnable && (job.coordinator != nil) {
+		scheduledTime := t.Truncate(time.Second)
+		nextScheduledTime := scheduledTime.Add(job.cron.IntervalDuration())
+		canBeScheduled, scheduledTime, err := job.coordinator.Coordinate(job.name, scheduledTime, nextScheduledTime)
+		if err != nil {
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
+			job.addStat(jobStat)
+			return false
+		}
+		if !canBeScheduled {
+			job.ScheduledAt(scheduledTime)
+		}
+		isRunnable = canBeScheduled
 	}
 	return isRunnable
 }
