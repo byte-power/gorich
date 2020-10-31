@@ -27,6 +27,18 @@ type Scheduler struct {
 	queue                 chan Job
 }
 
+func Once(name string, function interface{}, params ...interface{}) *OnceJob {
+	return defaultScheduler.AddRunOnceJob(name, function, params...)
+}
+
+func Periodic(name string, function interface{}, params ...interface{}) *PeriodicJob {
+	return defaultScheduler.AddPeriodicJob(name, function, params...)
+}
+
+func Start() {
+	defaultScheduler.Start()
+}
+
 func NewScheduler(queueSize, workerCount int) Scheduler {
 	return Scheduler{
 		jobs:                  make(map[string]Job, 0),
@@ -40,12 +52,7 @@ func (scheduler *Scheduler) jobCount() int {
 }
 
 func (scheduler *Scheduler) AddPeriodicJob(name string, function interface{}, params ...interface{}) *PeriodicJob {
-	job := &PeriodicJob{
-		name:     name,
-		function: function,
-		params:   params,
-		cron:     &Cron{timezone: time.Local},
-	}
+	job := NewPeriodicJob(name, function, params)
 	scheduler.jobs[name] = job
 	return job
 }
@@ -140,7 +147,6 @@ func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextSchedu
 	key := fmt.Sprintf("gorich:task:%s:%s", coordinator.name, name)
 	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
 	nextScheduledTs := nextScheduledTime.Truncate(time.Second).Unix()
-	log.Printf("scheduled_ts:%d, next_scheduled_ts:%d\n", scheduledTs, nextScheduledTs)
 
 	redisScript := redis.NewScript(coordinateScript)
 	result, err := redisScript.Run(
@@ -157,23 +163,6 @@ func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextSchedu
 		return false, time.Time{}, newCoordinateError(err)
 	}
 	return canBeScheduled, time.Unix(scheduledAt, 0), nil
-}
-
-func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
-	job.coordinator = coordinator
-	return job
-}
-
-func Once(name string, function interface{}, params ...interface{}) *OnceJob {
-	return defaultScheduler.AddRunOnceJob(name, function, params...)
-}
-
-func Periodic(name string, function interface{}, params ...interface{}) *PeriodicJob {
-	return defaultScheduler.AddPeriodicJob(name, function, params...)
-}
-
-func Start() {
-	defaultScheduler.Start()
 }
 
 func JobStats() map[string][]JobStat {
@@ -217,7 +206,7 @@ type OnceJob struct {
 	jobStatLock   sync.Mutex
 }
 
-func NewOnceJob(name string, function interface{}, params ...interface{}) *OnceJob {
+func NewOnceJob(name string, function interface{}, params []interface{}) *OnceJob {
 	job := &OnceJob{
 		name:     name,
 		function: function,
@@ -290,6 +279,15 @@ type PeriodicJob struct {
 	coordinator   *Coordinator
 }
 
+func NewPeriodicJob(name string, function interface{}, params []interface{}) *PeriodicJob {
+	return &PeriodicJob{
+		name:     name,
+		function: function,
+		params:   params,
+		cron:     &Cron{timezone: time.Local},
+	}
+}
+
 func (job *PeriodicJob) Name() string {
 	return job.name
 }
@@ -352,6 +350,11 @@ func (job *PeriodicJob) ScheduledAt(t time.Time) {
 // 	}
 // 	return job.scheduledTime.Add(job.cron.IntervalDuration()).Truncate(time.Second)
 // }
+
+func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
+	job.coordinator = coordinator
+	return job
+}
 
 func (job *PeriodicJob) EverySeconds(second int) *PeriodicJob {
 	job.cron.intervalType = intervalSecond
@@ -503,10 +506,8 @@ func (job *PeriodicJob) addStat(stat JobStat) {
 var ErrNotFunctionType = errors.New("job's function is not function type")
 var ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
 
-func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) JobStat {
-	stat := JobStat{
-		IsSuccess: true,
-	}
+func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) (stat JobStat) {
+	stat.IsSuccess = true
 
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -535,7 +536,7 @@ func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) Job
 			stat.Err = err
 		}
 	}
-	return stat
+	return
 }
 
 type IntervalType string
