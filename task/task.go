@@ -86,7 +86,6 @@ func (scheduler *Scheduler) Start() {
 func (scheduler *Scheduler) runJobs(t time.Time) {
 	runnableJobs := scheduler.getRunnableJobs(t)
 	for _, job := range runnableJobs {
-		job.ScheduledAt(t)
 		go job.Run(t)
 	}
 }
@@ -252,6 +251,7 @@ func (job *OnceJob) ScheduledAt(t time.Time) {
 
 func (job *OnceJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
+	job.ScheduledAt(t)
 	startTime := time.Now()
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
 	stat.RunDuration = time.Now().Sub(startTime)
@@ -297,6 +297,9 @@ func (job *PeriodicJob) Stats() []JobStat {
 }
 
 func (job *PeriodicJob) IsRunnable(t time.Time) bool {
+	if !job.cron.IsValid() {
+		return false
+	}
 	at := getAtTime(job.cron.intervalType, t)
 	var isRunnable bool
 	// scheduledTime.IsZero == true if the job has not been sheduled yet.
@@ -474,6 +477,7 @@ func getAtTime(intervalType IntervalType, t time.Time) time.Duration {
 
 func (job *PeriodicJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
+	job.ScheduledAt(t)
 	startTime := time.Now()
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
 	stat.RunDuration = time.Now().Sub(startTime)
@@ -550,6 +554,10 @@ const (
 	intervalMonth  IntervalType = "month"
 )
 
+func (intervalType IntervalType) IsZero() bool {
+	return intervalType == ""
+}
+
 type Cron struct {
 	interval     int
 	intervalType IntervalType
@@ -589,6 +597,9 @@ func EveryDays(day int) *Cron {
 
 var ErrTimeRange = errors.New("time range is invalid")
 
+func (cron *Cron) IsValid() bool {
+	return (cron.interval != 0) && (!cron.intervalType.IsZero())
+}
 func (cron *Cron) AtHourInDay(hour, minute, second int) error {
 	if !isValidHour(hour) || !isValidMinute(minute) && !isValidSecond(second) {
 		return ErrTimeRange
