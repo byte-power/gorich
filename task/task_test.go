@@ -33,6 +33,23 @@ func TestPeroidicJob(t *testing.T) {
 
 }
 
+func TestPeroidicJobNoAtTime(t *testing.T) {
+	name := "test_job"
+	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job.EveryMinutes(1)
+
+	executeTime := time.Date(2020, time.November, 2, 10, 10, 30, 0, time.Local)
+	assert.False(t, job.IsRunnable(executeTime))
+
+	executeTime = time.Date(2020, time.November, 2, 10, 10, 0, 0, time.Local)
+	assert.True(t, job.IsRunnable(executeTime))
+	job.Run(executeTime)
+	assert.False(t, job.IsRunnable(executeTime))
+
+	executeTime = time.Date(2020, time.November, 2, 10, 11, 0, 0, time.Local)
+	assert.True(t, job.IsRunnable(executeTime))
+}
+
 func TestPeroidicJobEveryDay(t *testing.T) {
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)

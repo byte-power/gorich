@@ -270,7 +270,7 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 	var isRunnable bool
 	// scheduledTime.IsZero == true if the job has not been sheduled yet.
 	if job.scheduledTime.IsZero() {
-		if (job.cron.at == 0) || (at == job.cron.at) {
+		if at == job.cron.at {
 			if job.cron.intervalType == intervalWeek {
 				if job.cron.weekDay == t.Weekday() {
 					isRunnable = true
