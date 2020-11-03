@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"reflect"
-	"strconv"
 	"sync"
 	"time"
 
@@ -17,6 +16,15 @@ const (
 	defaultConcurrentWorkerCount = 100
 	defaultQueueSize             = 500
 	maxStatsCount                = 100
+)
+
+var (
+	ErrRaceCondition = errors.New("race condition when coordination")
+
+	ErrTimeRange = errors.New("time range is invalid")
+
+	ErrNotFunctionType       = errors.New("job's function is not function type")
+	ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
 )
 
 var defaultScheduler = NewScheduler(defaultQueueSize, defaultConcurrentWorkerCount)
@@ -112,56 +120,14 @@ func newCoordinateError(err error) error {
 	return fmt.Errorf("coordinate error:%w", err)
 }
 
-const coordinateScript = `
-		local key = KEYS[1]
-		local current_scheduled_ts = ARGV[1]
-		local next_scheduled_ts = ARGV[2]
-		local table = redis.call("HGETALL", key) 
-		local can_be_scheduled = 1
-		local scheduled_time = current_scheduled_ts
-		if next(table) == nil then 
-			redis.call("HMSET", key, "current_scheduled_ts", current_scheduled_ts, "next_scheduled_ts", next_scheduled_ts)
-			redis.call("EXPIREAT", key, next_scheduled_ts)
-		else
-			local key1 = table[1]
-			local value1 = table[2]
-			local key2 = table[3]
-			local value2 = table[4]
-			local scheduled_info_table = {}
-			scheduled_info_table[key1] = value1
-			scheduled_info_table[key2] = value2
-			local recorded_next_ts = tonumber(scheduled_info_table["next_scheduled_ts"])
-			if recorded_next_ts <= tonumber(current_scheduled_ts) then
-				redis.call("HMSET", key, "current_scheduled_ts", current_scheduled_ts, "next_scheduled_ts", next_scheduled_ts)
-				redis.call("EXPIREAT", key, next_scheduled_ts)
-			else
-				scheduled_time = scheduled_info_table["current_scheduled_ts"]
-				can_be_scheduled = 0
-			end
-		end
-		return {can_be_scheduled, scheduled_time}
-	`
-
-func (coordinator Coordinator) Coordinate(name string, scheduledTime, nextScheduledTime time.Time) (bool, time.Time, error) {
+func (coordinator Coordinator) Coordinate(name string, scheduledTime time.Time) (bool, error) {
 	key := fmt.Sprintf("gorich:task:%s:%s", coordinator.name, name)
-	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
-	nextScheduledTs := nextScheduledTime.Truncate(time.Second).Unix()
-
-	redisScript := redis.NewScript(coordinateScript)
-	result, err := redisScript.Run(
-		context.Background(),
-		coordinator.redisClient, []string{key},
-		scheduledTs,
-		nextScheduledTs).Result()
+	scheduledTime = scheduledTime.Truncate(time.Second)
+	isSet, err := coordinator.redisClient.SetNX(context.Background(), key, scheduledTime, 5*time.Second).Result()
 	if err != nil {
-		return false, time.Time{}, err
+		err = newCoordinateError(err)
 	}
-	canBeScheduled := result.([]interface{})[0].(int64) == 1
-	scheduledAt, err := strconv.ParseInt(result.([]interface{})[1].(string), 10, 64)
-	if err != nil {
-		return false, time.Time{}, newCoordinateError(err)
-	}
-	return canBeScheduled, time.Unix(scheduledAt, 0), nil
+	return isSet, err
 }
 
 func JobStats() map[string][]JobStat {
@@ -328,15 +294,15 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 	}
 	if isRunnable && (job.coordinator != nil) {
 		scheduledTime := t.Truncate(time.Second)
-		nextScheduledTime := scheduledTime.Add(job.cron.IntervalDuration())
-		canBeScheduled, scheduledTime, err := job.coordinator.Coordinate(job.name, scheduledTime, nextScheduledTime)
+		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
 		if err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
 			job.addStat(jobStat)
 			return false
 		}
 		if !canBeScheduled {
-			job.ScheduledAt(scheduledTime)
+			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
+			job.addStat(jobStat)
 		}
 		isRunnable = canBeScheduled
 	}
@@ -346,13 +312,6 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 func (job *PeriodicJob) ScheduledAt(t time.Time) {
 	job.scheduledTime = t
 }
-
-// func (job *PeriodicJob) NextRunTime(tickTime time.Time) time.Time {
-// 	if job.scheduledTime.IsZero() {
-// 		return tickTime.Truncate(time.Second)
-// 	}
-// 	return job.scheduledTime.Add(job.cron.IntervalDuration()).Truncate(time.Second)
-// }
 
 func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
 	job.coordinator = coordinator
@@ -507,9 +466,6 @@ func (job *PeriodicJob) addStat(stat JobStat) {
 	}
 }
 
-var ErrNotFunctionType = errors.New("job's function is not function type")
-var ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
-
 func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) (stat JobStat) {
 	stat.IsSuccess = true
 
@@ -594,8 +550,6 @@ func EveryHours(hour int) *Cron {
 func EveryDays(day int) *Cron {
 	return newCron(day, intervalDay, 0, time.Local)
 }
-
-var ErrTimeRange = errors.New("time range is invalid")
 
 func (cron *Cron) IsValid() bool {
 	return (cron.interval != 0) && (!cron.intervalType.IsZero())
