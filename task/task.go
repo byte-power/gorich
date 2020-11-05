@@ -36,6 +36,7 @@ var defaultScheduler = NewScheduler(defaultConcurrentWorkerCount)
 
 type Scheduler struct {
 	jobs       map[string]Job
+	jobLock    sync.RWMutex
 	workerPool *ants.Pool
 }
 
@@ -51,6 +52,10 @@ func Start() {
 	defaultScheduler.Start()
 }
 
+func RemoveJob(name string) {
+	defaultScheduler.RemoveJob(name)
+}
+
 func NewScheduler(workerCount int) Scheduler {
 	pool, err := ants.NewPool(workerCount, ants.WithNonblocking(true))
 	if err != nil {
@@ -58,6 +63,7 @@ func NewScheduler(workerCount int) Scheduler {
 	}
 	return Scheduler{
 		jobs:       make(map[string]Job, 0),
+		jobLock:    sync.RWMutex{},
 		workerPool: pool,
 	}
 }
@@ -68,24 +74,42 @@ func (scheduler *Scheduler) jobCount() int {
 
 func (scheduler *Scheduler) AddPeriodicJob(name string, function interface{}, params ...interface{}) *PeriodicJob {
 	job := NewPeriodicJob(name, function, params)
+	scheduler.jobLock.Lock()
+	defer scheduler.jobLock.Unlock()
 	scheduler.jobs[name] = job
 	return job
 }
 
 func (scheduler *Scheduler) AddRunOnceJob(name string, function interface{}, params ...interface{}) *OnceJob {
 	job := NewOnceJob(name, function, params)
+	scheduler.jobLock.Lock()
+	defer scheduler.jobLock.Unlock()
 	scheduler.jobs[name] = job
 	return job
 }
 
 func (scheduler *Scheduler) getRunnableJobs(t time.Time) []Job {
 	runnableJobs := []Job{}
+	scheduler.jobLock.RLock()
+	defer scheduler.jobLock.RUnlock()
 	for _, job := range scheduler.jobs {
 		if job.IsRunnable(t) {
 			runnableJobs = append(runnableJobs, job)
 		}
 	}
 	return runnableJobs
+}
+
+func (scheduler *Scheduler) RemoveJob(name string) {
+	scheduler.jobLock.Lock()
+	defer scheduler.jobLock.Unlock()
+	delete(scheduler.jobs, name)
+}
+
+func (scheduler *Scheduler) ClearJobs() {
+	scheduler.jobLock.Lock()
+	defer scheduler.jobLock.Unlock()
+	scheduler.jobs = make(map[string]Job, 0)
 }
 
 func (scheduler *Scheduler) Start() {
@@ -129,6 +153,8 @@ func (scheduler *Scheduler) runJobs(t time.Time) {
 
 func (scheduler *Scheduler) JobStats() map[string][]JobStat {
 	jobStats := make(map[string][]JobStat, len(scheduler.jobs))
+	scheduler.jobLock.RLock()
+	defer scheduler.jobLock.RUnlock()
 	for name, job := range scheduler.jobs {
 		jobStats[name] = job.Stats()
 	}
