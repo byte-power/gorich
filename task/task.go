@@ -10,12 +10,15 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/panjf2000/ants/v2"
 )
 
 const (
 	defaultConcurrentWorkerCount = 100
 	defaultQueueSize             = 500
 	maxStatsCount                = 100
+
+	JobMaxExecutionDuration = 1 * time.Hour
 )
 
 var (
@@ -23,16 +26,17 @@ var (
 
 	ErrTimeRange = errors.New("time range is invalid")
 
+	ErrJobTimeout = errors.New("job is timeout")
+
 	ErrNotFunctionType       = errors.New("job's function is not function type")
 	ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
 )
 
-var defaultScheduler = NewScheduler(defaultQueueSize, defaultConcurrentWorkerCount)
+var defaultScheduler = NewScheduler(defaultConcurrentWorkerCount)
 
 type Scheduler struct {
-	jobs                  map[string]Job
-	concurrentWorkerCount int
-	queue                 chan Job
+	jobs       map[string]Job
+	workerPool *ants.Pool
 }
 
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
@@ -47,11 +51,14 @@ func Start() {
 	defaultScheduler.Start()
 }
 
-func NewScheduler(queueSize, workerCount int) Scheduler {
+func NewScheduler(workerCount int) Scheduler {
+	pool, err := ants.NewPool(workerCount, ants.WithNonblocking(true))
+	if err != nil {
+		panic(err)
+	}
 	return Scheduler{
-		jobs:                  make(map[string]Job, 0),
-		concurrentWorkerCount: workerCount,
-		queue:                 make(chan Job, queueSize),
+		jobs:       make(map[string]Job, 0),
+		workerPool: pool,
 	}
 }
 
@@ -94,7 +101,29 @@ func (scheduler *Scheduler) Start() {
 func (scheduler *Scheduler) runJobs(t time.Time) {
 	runnableJobs := scheduler.getRunnableJobs(t)
 	for _, job := range runnableJobs {
-		go job.Run(t)
+		function := func() {
+			channel := make(chan bool, 1)
+			go func() {
+				job.Run(t)
+				channel <- true
+			}()
+			select {
+			case <-channel:
+				return
+			case <-time.After(JobMaxExecutionDuration):
+				jobStat := JobStat{
+					IsSuccess:     false,
+					Err:           ErrJobTimeout,
+					ScheduledTime: t,
+					RunDuration:   JobMaxExecutionDuration,
+				}
+				job.AddStat(jobStat)
+			}
+		}
+		if err := scheduler.workerPool.Submit(function); err != nil {
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
+			job.AddStat(jobStat)
+		}
 	}
 }
 
@@ -156,6 +185,7 @@ type Job interface {
 	ScheduledAt(time.Time)
 	Run(time.Time)
 	Stats() []JobStat
+	AddStat(stat JobStat)
 }
 
 type OnceJob struct {
@@ -222,10 +252,10 @@ func (job *OnceJob) Run(t time.Time) {
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
 	stat.RunDuration = time.Now().Sub(startTime)
 	stat.ScheduledTime = t
-	job.addStat(stat)
+	job.AddStat(stat)
 }
 
-func (job *OnceJob) addStat(stat JobStat) {
+func (job *OnceJob) AddStat(stat JobStat) {
 	job.jobStatLock.Lock()
 	defer job.jobStatLock.Unlock()
 	job.jobStats = append(job.jobStats, stat)
@@ -297,12 +327,12 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
 		if err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
-			job.addStat(jobStat)
+			job.AddStat(jobStat)
 			return false
 		}
 		if !canBeScheduled {
 			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
-			job.addStat(jobStat)
+			job.AddStat(jobStat)
 		}
 		isRunnable = canBeScheduled
 	}
@@ -441,7 +471,7 @@ func (job *PeriodicJob) Run(t time.Time) {
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
 	stat.RunDuration = time.Now().Sub(startTime)
 	stat.ScheduledTime = t
-	job.addStat(stat)
+	job.AddStat(stat)
 }
 
 func interfaceToError(i interface{}) error {
@@ -457,7 +487,7 @@ func interfaceToError(i interface{}) error {
 	return err
 }
 
-func (job *PeriodicJob) addStat(stat JobStat) {
+func (job *PeriodicJob) AddStat(stat JobStat) {
 	job.jobStatLock.Lock()
 	defer job.jobStatLock.Unlock()
 	job.jobStats = append(job.jobStats, stat)
