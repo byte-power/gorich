@@ -165,28 +165,44 @@ func (scheduler *Scheduler) JobStats() map[string][]JobStat {
 	return jobStats
 }
 
-type Coordinator struct {
-	name        string
-	redisClient *redis.Client
-}
-
-func NewCoordinator(name string, address string) *Coordinator {
-	redisClient := redis.NewClient(&redis.Options{Addr: address})
-	return &Coordinator{name: name, redisClient: redisClient}
-}
-
 func newCoordinateError(err error) error {
 	return fmt.Errorf("coordinate error:%w", err)
 }
 
-func (coordinator Coordinator) Coordinate(name string, scheduledTime time.Time) (bool, error) {
+const (
+	redisStandaloneMode = "standalone"
+	redisClusterMode    = "cluster"
+)
+
+type Coordinator struct {
+	name               string
+	redisMode          string
+	redisClient        *redis.Client
+	redisClusterClient *redis.ClusterClient
+}
+
+func NewCoordinatorFromRedis(name, address string) *Coordinator {
+	redisClient := redis.NewClient(&redis.Options{Addr: address})
+	return &Coordinator{name: name, redisMode: redisStandaloneMode, redisClient: redisClient}
+}
+
+func NewCoordinatorFromRedisCluster(name string, addrs []string) *Coordinator {
+	redisClusterClient := redis.NewClusterClient(&redis.ClusterOptions{Addrs: addrs})
+	return &Coordinator{name: name, redisMode: redisClusterMode, redisClusterClient: redisClusterClient}
+}
+
+func (coordinator *Coordinator) Coordinate(name string, scheduledTime time.Time) (ok bool, err error) {
 	key := fmt.Sprintf("gorich:task:%s:%s", coordinator.name, name)
 	scheduledTime = scheduledTime.Truncate(time.Second)
-	isSet, err := coordinator.redisClient.SetNX(context.Background(), key, scheduledTime, 5*time.Second).Result()
+	if coordinator.redisMode == redisStandaloneMode {
+		ok, err = coordinator.redisClient.SetNX(context.Background(), key, scheduledTime, 5*time.Second).Result()
+	} else if coordinator.redisMode == redisClusterMode {
+		ok, err = coordinator.redisClusterClient.SetNX(context.Background(), key, scheduledTime, 5*time.Second).Result()
+	}
 	if err != nil {
 		err = newCoordinateError(err)
 	}
-	return isSet, err
+	return
 }
 
 func JobStats() map[string][]JobStat {
