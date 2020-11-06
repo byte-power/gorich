@@ -56,6 +56,10 @@ func RemoveJob(name string) {
 	defaultScheduler.RemoveJob(name)
 }
 
+func ClearJobs() {
+	defaultScheduler.ClearJobs()
+}
+
 func NewScheduler(workerCount int) Scheduler {
 	pool, err := ants.NewPool(workerCount, ants.WithNonblocking(true))
 	if err != nil {
@@ -215,25 +219,25 @@ type Job interface {
 }
 
 type OnceJob struct {
-	name          string
-	function      interface{}
-	params        []interface{}
-	delay         time.Duration
-	runnable      bool
-	timer         *time.Timer
-	scheduled     bool
-	scheduledTime time.Time
-	jobStats      []JobStat
-	jobStatLock   sync.Mutex
+	name                  string
+	function              interface{}
+	params                []interface{}
+	delay                 time.Duration
+	timer                 *time.Timer
+	scheduled             bool
+	expectedScheduledTime time.Time
+	scheduledTime         time.Time
+	jobStats              []JobStat
+	jobStatLock           sync.Mutex
 }
 
 func NewOnceJob(name string, function interface{}, params []interface{}) *OnceJob {
 	job := &OnceJob{
-		name:     name,
-		function: function,
-		params:   params,
-		delay:    0,
-		runnable: true,
+		name:                  name,
+		function:              function,
+		params:                params,
+		delay:                 0,
+		expectedScheduledTime: time.Now(),
 	}
 	return job
 }
@@ -248,22 +252,12 @@ func (job *OnceJob) Stats() []JobStat {
 
 func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 	job.delay = delay
-	job.runnable = false
-	if job.timer != nil {
-		job.timer.Stop()
-	}
-	go job.waitUntilRunnable()
+	job.expectedScheduledTime = time.Now().Add(delay)
 	return job
 }
 
-func (job *OnceJob) waitUntilRunnable() {
-	job.timer = time.NewTimer(job.delay)
-	<-job.timer.C
-	job.runnable = true
-}
-
 func (job *OnceJob) IsRunnable(t time.Time) bool {
-	return job.runnable && !job.scheduled
+	return !job.expectedScheduledTime.After(t) && !job.scheduled
 }
 
 func (job *OnceJob) ScheduledAt(t time.Time) {

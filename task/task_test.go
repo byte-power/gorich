@@ -8,7 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func emptyScheduler() {
+	ClearJobs()
+}
 func TestOnceJob(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Once(name, func(a, b int) int { return a + b }, 10, 20)
 	assert.True(t, job.IsRunnable(time.Now()))
@@ -26,6 +30,7 @@ func TestOnceJob(t *testing.T) {
 }
 
 func TestPeroidicJob(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	runnable := job.IsRunnable(time.Now())
@@ -34,6 +39,7 @@ func TestPeroidicJob(t *testing.T) {
 }
 
 func TestPeroidicJobNoAtTime(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	job.EveryMinutes(1)
@@ -51,6 +57,7 @@ func TestPeroidicJobNoAtTime(t *testing.T) {
 }
 
 func TestPeroidicJobEveryDay(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	hour := 10
@@ -76,6 +83,7 @@ func TestPeroidicJobEveryDay(t *testing.T) {
 }
 
 func TestPeroidicJobEveryHour(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	minute := 20
@@ -100,6 +108,7 @@ func TestPeroidicJobEveryHour(t *testing.T) {
 }
 
 func TestPeroidicJobEveryMinute(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	second := 30
@@ -123,6 +132,7 @@ func TestPeroidicJobEveryMinute(t *testing.T) {
 }
 
 func TestPeroidicJobEveryWeekday(t *testing.T) {
+	defer emptyScheduler()
 	name := "test_job"
 	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	currentTime := time.Now()
