@@ -161,3 +161,36 @@ func TestPeroidicJobEveryWeekday(t *testing.T) {
 	job.Run(executeTime)
 	assert.False(t, job.IsRunnable(executeTime))
 }
+
+func TestPeriodicJobCoordinator(t *testing.T) {
+	defer emptyScheduler()
+	coordinator := NewCoordinatorFromRedis("coordinator1", "localhost:6379")
+
+	scheduler1 := NewScheduler(10)
+	scheduler2 := NewScheduler(10)
+	sum := 0
+	function := func(a int) { sum = sum + a }
+
+	name := "test_job"
+	job1 := scheduler1.AddPeriodicJob(name, function, 1).EverySeconds(5).Coordinate(coordinator)
+	job2 := scheduler2.AddPeriodicJob(name, function, 1).EverySeconds(5).Coordinate(coordinator)
+
+	currentTime := time.Now()
+	assert.True(t, job1.IsRunnable(currentTime))
+	assert.True(t, job2.IsRunnable(currentTime))
+	job1.Run(currentTime)
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job1.scheduledTime))
+	assert.False(t, job1.IsRunnable(currentTime))
+	assert.False(t, job2.IsRunnable(currentTime))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job2.scheduledTime))
+
+	time.Sleep(5 * time.Second)
+	currentTime = time.Now()
+	assert.True(t, job1.IsRunnable(currentTime))
+	assert.True(t, job2.IsRunnable(currentTime))
+	job2.Run(currentTime)
+	assert.False(t, job1.IsRunnable(currentTime))
+	assert.False(t, job2.IsRunnable(currentTime))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job1.scheduledTime))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job2.scheduledTime))
+}

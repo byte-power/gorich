@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strconv"
 	"sync"
 	"time"
 
@@ -121,7 +122,7 @@ func (scheduler *Scheduler) Start() {
 	for {
 		select {
 		case tickerTime := <-ticker.C:
-			scheduler.runJobs(tickerTime)
+			scheduler.runJobs(tickerTime.Truncate(time.Second))
 		}
 	}
 }
@@ -192,12 +193,41 @@ func NewCoordinatorFromRedisCluster(name string, addrs []string) *Coordinator {
 }
 
 func (coordinator *Coordinator) Coordinate(name string, scheduledTime time.Time) (ok bool, err error) {
-	key := fmt.Sprintf("gorich:task:%s:%s", coordinator.name, name)
-	scheduledTime = scheduledTime.Truncate(time.Second)
+	key := coordinator.getCoordinatorKey(name)
+	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
 	if coordinator.redisMode == redisStandaloneMode {
-		ok, err = coordinator.redisClient.SetNX(context.Background(), key, scheduledTime, 5*time.Second).Result()
+		ok, err = coordinator.redisClient.SetNX(context.Background(), key, scheduledTs, 5*time.Second).Result()
 	} else if coordinator.redisMode == redisClusterMode {
-		ok, err = coordinator.redisClusterClient.SetNX(context.Background(), key, scheduledTime, 5*time.Second).Result()
+		ok, err = coordinator.redisClusterClient.SetNX(context.Background(), key, scheduledTs, 5*time.Second).Result()
+	}
+	if err != nil {
+		err = newCoordinateError(err)
+	}
+	return
+}
+
+func (coordinator *Coordinator) getCoordinatorKey(jobName string) string {
+	return fmt.Sprintf("gorich:task:%s:%s", coordinator.name, jobName)
+}
+
+func (coordinator *Coordinator) checkRunnableAndGetLastScheduledTime(name string) (isRunnable bool, scheduledTime time.Time, err error) {
+	key := coordinator.getCoordinatorKey(name)
+	var value string
+	if coordinator.redisMode == redisStandaloneMode {
+		value, err = coordinator.redisClient.Get(context.Background(), key).Result()
+	} else if coordinator.redisMode == redisClusterMode {
+		value, err = coordinator.redisClusterClient.Get(context.Background(), key).Result()
+	}
+	if err == nil {
+		if ts, convErr := strconv.ParseInt(value, 10, 64); convErr != nil {
+			err = newCoordinateError(convErr)
+		} else {
+			scheduledTime = time.Unix(ts, 0)
+		}
+	}
+	if err == redis.Nil {
+		err = nil
+		isRunnable = true
 	}
 	if err != nil {
 		err = newCoordinateError(err)
@@ -253,7 +283,7 @@ func NewOnceJob(name string, function interface{}, params []interface{}) *OnceJo
 		function:              function,
 		params:                params,
 		delay:                 0,
-		expectedScheduledTime: time.Now(),
+		expectedScheduledTime: time.Now().Truncate(time.Second),
 	}
 	return job
 }
@@ -268,7 +298,7 @@ func (job *OnceJob) Stats() []JobStat {
 
 func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 	job.delay = delay
-	job.expectedScheduledTime = time.Now().Add(delay)
+	job.expectedScheduledTime = time.Now().Add(delay).Truncate(time.Second)
 	return job
 }
 
@@ -277,12 +307,13 @@ func (job *OnceJob) IsRunnable(t time.Time) bool {
 }
 
 func (job *OnceJob) ScheduledAt(t time.Time) {
-	job.scheduledTime = t
+	job.scheduledTime = t.Truncate(time.Second)
 	job.scheduled = true
 }
 
 func (job *OnceJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
+	t = t.Truncate(time.Second)
 	job.ScheduledAt(t)
 	startTime := time.Now()
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
@@ -358,25 +389,23 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 			isRunnable = false
 		}
 	}
-	if isRunnable && (job.coordinator != nil) {
-		scheduledTime := t.Truncate(time.Second)
-		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
+	if isRunnable && job.coordinator != nil {
+		ok, scheduledTime, err := job.coordinator.checkRunnableAndGetLastScheduledTime(job.name)
 		if err != nil {
-			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
 			job.AddStat(jobStat)
 			return false
 		}
-		if !canBeScheduled {
-			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
-			job.AddStat(jobStat)
+		if !ok && !scheduledTime.IsZero() {
+			job.ScheduledAt(scheduledTime)
 		}
-		isRunnable = canBeScheduled
+		isRunnable = ok
 	}
 	return isRunnable
 }
 
 func (job *PeriodicJob) ScheduledAt(t time.Time) {
-	job.scheduledTime = t
+	job.scheduledTime = t.Truncate(time.Second)
 }
 
 func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
@@ -502,6 +531,21 @@ func getAtTime(intervalType IntervalType, t time.Time) time.Duration {
 
 func (job *PeriodicJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
+	t = t.Truncate(time.Second)
+	if job.coordinator != nil {
+		scheduledTime := t.Truncate(time.Second)
+		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
+		if err != nil {
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
+			job.AddStat(jobStat)
+			return
+		}
+		if !canBeScheduled {
+			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
+			job.AddStat(jobStat)
+			return
+		}
+	}
 	job.ScheduledAt(t)
 	startTime := time.Now()
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
