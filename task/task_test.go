@@ -38,8 +38,8 @@ func TestOnceJobCoordinate(t *testing.T) {
 	scheduler2 := NewScheduler(10)
 	function := func(a int) int { return a }
 
-	job1 := scheduler1.AddRunOnceJob(name, function, 1).Coordinate(coordinator)
-	job2 := scheduler2.AddRunOnceJob(name, function, 1).Coordinate(coordinator)
+	job1 := scheduler1.AddRunOnceJob(name, function, 1).SetCoordinate(coordinator)
+	job2 := scheduler2.AddRunOnceJob(name, function, 1).SetCoordinate(coordinator)
 
 	currentTime := time.Now()
 	assert.True(t, job1.IsRunnable(currentTime))
@@ -219,8 +219,8 @@ func TestPeriodicJobCoordinator(t *testing.T) {
 	function := func(a int) { sum = sum + a }
 
 	name := "test_job"
-	job1 := scheduler1.AddPeriodicJob(name, function, 1).EverySeconds(5).Coordinate(coordinator)
-	job2 := scheduler2.AddPeriodicJob(name, function, 1).EverySeconds(5).Coordinate(coordinator)
+	job1 := scheduler1.AddPeriodicJob(name, function, 1).EverySeconds(5).SetCoordinate(coordinator)
+	job2 := scheduler2.AddPeriodicJob(name, function, 1).EverySeconds(5).SetCoordinate(coordinator)
 
 	currentTime := time.Now()
 	assert.True(t, job1.IsRunnable(currentTime))

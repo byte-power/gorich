@@ -335,8 +335,27 @@ func (job *commonJob) run(t time.Time) {
 	job.AddStat(stat)
 }
 
-func (job *commonJob) Coordinate(coordinator *Coordinator) {
+func (job *commonJob) setCoordinate(coordinator *Coordinator) {
 	job.coordinator = coordinator
+}
+
+func (job *commonJob) coordinate(t time.Time) bool {
+	if job.coordinator == nil {
+		return true
+	}
+	scheduledTime := t.Truncate(time.Second)
+	canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
+	if err != nil {
+		jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
+		job.AddStat(jobStat)
+		return false
+	}
+	if !canBeScheduled {
+		jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
+		job.AddStat(jobStat)
+		return false
+	}
+	return true
 }
 
 type OnceJob struct {
@@ -383,8 +402,8 @@ func (job *OnceJob) IsRunnable(t time.Time) bool {
 	return isRunnable
 }
 
-func (job *OnceJob) Coordinate(coordinator *Coordinator) *OnceJob {
-	job.commonJob.Coordinate(coordinator)
+func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
+	job.commonJob.setCoordinate(coordinator)
 	return job
 }
 
@@ -395,22 +414,10 @@ func (job *OnceJob) ScheduledAt(t time.Time) {
 
 func (job *OnceJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
-	if job.coordinator != nil {
-		scheduledTime := t.Truncate(time.Second)
-		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
-		if err != nil {
-			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
-			job.AddStat(jobStat)
-			return
-		}
-		if !canBeScheduled {
-			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
-			job.AddStat(jobStat)
-			return
-		}
+	if job.coordinate(t) {
+		job.ScheduledAt(t)
+		job.commonJob.run(t)
 	}
-	job.ScheduledAt(t)
-	job.commonJob.run(t)
 }
 
 type PeriodicJob struct {
@@ -463,8 +470,8 @@ func (job *PeriodicJob) ScheduledAt(t time.Time) {
 	job.scheduledTime = t.Truncate(time.Second)
 }
 
-func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
-	job.commonJob.Coordinate(coordinator)
+func (job *PeriodicJob) SetCoordinate(coordinator *Coordinator) *PeriodicJob {
+	job.commonJob.setCoordinate(coordinator)
 	return job
 }
 
@@ -569,23 +576,10 @@ func (job *PeriodicJob) SetTimeZone(tz *time.Location) *PeriodicJob {
 
 func (job *PeriodicJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
-	t = t.Truncate(time.Second)
-	if job.coordinator != nil {
-		scheduledTime := t.Truncate(time.Second)
-		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
-		if err != nil {
-			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
-			job.AddStat(jobStat)
-			return
-		}
-		if !canBeScheduled {
-			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
-			job.AddStat(jobStat)
-			return
-		}
+	if job.coordinate(t) {
+		job.ScheduledAt(t)
+		job.commonJob.run(t)
 	}
-	job.ScheduledAt(t)
-	job.commonJob.run(t)
 }
 
 func interfaceToError(i interface{}) error {
