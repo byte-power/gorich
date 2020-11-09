@@ -218,7 +218,7 @@ func TestPeriodicJobCoordinator(t *testing.T) {
 	sum := 0
 	function := func(a int) { sum = sum + a }
 
-	name := "test_job"
+	name := "test_periodic_job_coordinate"
 	job1 := scheduler1.AddPeriodicJob(name, function, 1).EverySeconds(5).SetCoordinate(coordinator)
 	job2 := scheduler2.AddPeriodicJob(name, function, 1).EverySeconds(5).SetCoordinate(coordinator)
 
