@@ -19,7 +19,7 @@ const (
 	defaultQueueSize             = 500
 	maxStatsCount                = 100
 
-	JobMaxExecutionDuration = 1 * time.Hour
+	jobMaxExecutionDuration = 1 * time.Hour
 )
 
 var (
@@ -61,6 +61,10 @@ func ClearJobs() {
 	defaultScheduler.ClearJobs()
 }
 
+func JobCount() int {
+	return defaultScheduler.JobCount()
+}
+
 func NewScheduler(workerCount int) Scheduler {
 	pool, err := ants.NewPool(workerCount, ants.WithNonblocking(true))
 	if err != nil {
@@ -73,7 +77,7 @@ func NewScheduler(workerCount int) Scheduler {
 	}
 }
 
-func (scheduler *Scheduler) jobCount() int {
+func (scheduler *Scheduler) JobCount() int {
 	return len(scheduler.jobs)
 }
 
@@ -139,12 +143,12 @@ func (scheduler *Scheduler) runJobs(t time.Time) {
 			select {
 			case <-channel:
 				return
-			case <-time.After(JobMaxExecutionDuration):
+			case <-time.After(jobMaxExecutionDuration):
 				jobStat := JobStat{
 					IsSuccess:     false,
 					Err:           ErrJobTimeout,
 					ScheduledTime: t,
-					RunDuration:   JobMaxExecutionDuration,
+					RunDuration:   jobMaxExecutionDuration,
 				}
 				job.AddStat(jobStat)
 			}
