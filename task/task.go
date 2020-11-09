@@ -39,6 +39,7 @@ type Scheduler struct {
 	jobs       map[string]Job
 	jobLock    sync.RWMutex
 	workerPool *ants.Pool
+	stop       chan bool
 }
 
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
@@ -51,6 +52,10 @@ func Periodic(name string, function interface{}, params ...interface{}) *Periodi
 
 func Start() {
 	defaultScheduler.Start()
+}
+
+func Stop(force bool) {
+	defaultScheduler.Stop(force)
 }
 
 func RemoveJob(name string) {
@@ -74,6 +79,7 @@ func NewScheduler(workerCount int) Scheduler {
 		jobs:       make(map[string]Job, 0),
 		jobLock:    sync.RWMutex{},
 		workerPool: pool,
+		stop:       make(chan bool),
 	}
 }
 
@@ -127,8 +133,33 @@ func (scheduler *Scheduler) Start() {
 		select {
 		case tickerTime := <-ticker.C:
 			scheduler.runJobs(tickerTime.Truncate(time.Second))
+		case <-scheduler.stop:
+			ticker.Stop()
+			return
 		}
 	}
+}
+
+func (scheduler *Scheduler) Stop(force bool) {
+	scheduler.stop <- true
+	if force {
+		scheduler.workerPool.Release()
+		return
+	}
+	for {
+		runningCount := scheduler.RunningJobCount()
+		if runningCount > 0 {
+			log.Printf("waiting %d jobs to finish...\n", runningCount)
+		} else {
+			scheduler.workerPool.Release()
+			break
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func (scheduler *Scheduler) RunningJobCount() int {
+	return scheduler.workerPool.Running()
 }
 
 func (scheduler *Scheduler) runJobs(t time.Time) {
