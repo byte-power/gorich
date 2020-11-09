@@ -358,27 +358,15 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 	if !job.cron.IsValid() {
 		return false
 	}
-	at := getAtTime(job.cron.intervalType, t)
-	var isRunnable bool
+	isRunnable := job.cron.isMatched(t)
+	if !isRunnable {
+		return false
+	}
 	// scheduledTime.IsZero == true if the job has not been sheduled yet.
-	if job.scheduledTime.IsZero() {
-		if at == job.cron.at {
-			if job.cron.intervalType == intervalWeek {
-				if job.cron.weekDay == t.Weekday() {
-					isRunnable = true
-				} else {
-					isRunnable = false
-				}
-			} else {
-				isRunnable = true
-			}
-		} else {
-			isRunnable = false
-		}
-	} else {
-		roundScheduledTime := job.scheduledTime.Truncate(time.Second)
+	if !job.scheduledTime.IsZero() {
+		scheduledTime := job.scheduledTime.Truncate(time.Second)
 		roundCurrentTime := t.Truncate(time.Second)
-		if !roundCurrentTime.Before(roundScheduledTime.Add(job.cron.IntervalDuration())) {
+		if !roundCurrentTime.Before(scheduledTime.Add(job.cron.IntervalDuration())) {
 			isRunnable = true
 		} else {
 			isRunnable = false
@@ -502,26 +490,9 @@ func (job *PeriodicJob) AtSecondInMinute(second int) (*PeriodicJob, error) {
 	return job, nil
 }
 
-func getAtTime(intervalType IntervalType, t time.Time) time.Duration {
-	var at time.Duration
-	switch intervalType {
-	case intervalWeek:
-		at = time.Duration(t.Hour())*time.Hour +
-			time.Duration(t.Minute())*time.Minute +
-			time.Duration(t.Second())*time.Second
-	case intervalDay:
-		at = time.Duration(t.Hour())*time.Hour +
-			time.Duration(t.Minute())*time.Minute +
-			time.Duration(t.Second())*time.Second
-	case intervalHour:
-		at = time.Duration(t.Minute())*time.Minute +
-			time.Duration(t.Second())*time.Second
-	case intervalMinute:
-		at = time.Duration(t.Second()) * time.Second
-	case intervalSecond:
-		at = time.Duration(0)
-	}
-	return at
+func (job *PeriodicJob) SetTimeZone(tz *time.Location) *PeriodicJob {
+	job.cron.setTimeZone(tz)
+	return job
 }
 
 func (job *PeriodicJob) Run(t time.Time) {
@@ -670,6 +641,10 @@ func (cron *cronExpression) AtSecondInMinute(second int) error {
 	return nil
 }
 
+func (cron *cronExpression) setTimeZone(tz *time.Location) {
+	cron.timezone = tz
+}
+
 func (cron *cronExpression) IntervalDuration() time.Duration {
 	var duration time.Duration
 	switch cron.intervalType {
@@ -687,14 +662,56 @@ func (cron *cronExpression) IntervalDuration() time.Duration {
 	return duration
 }
 
+func (cron *cronExpression) isMatched(t time.Time) (matched bool) {
+	at := cron.getAtTime(t)
+	weekday := cron.getWeekday(t)
+	if at == cron.at {
+		if cron.intervalType == intervalWeek {
+			if cron.weekDay == weekday {
+				matched = true
+			}
+		} else {
+			matched = true
+		}
+	}
+	return
+}
+
+func (cron *cronExpression) getAtTime(t time.Time) time.Duration {
+	t = t.In(cron.timezone)
+	var at time.Duration
+	switch cron.intervalType {
+	case intervalWeek:
+		at = time.Duration(t.Hour())*time.Hour +
+			time.Duration(t.Minute())*time.Minute +
+			time.Duration(t.Second())*time.Second
+	case intervalDay:
+		at = time.Duration(t.Hour())*time.Hour +
+			time.Duration(t.Minute())*time.Minute +
+			time.Duration(t.Second())*time.Second
+	case intervalHour:
+		at = time.Duration(t.Minute())*time.Minute +
+			time.Duration(t.Second())*time.Second
+	case intervalMinute:
+		at = time.Duration(t.Second()) * time.Second
+	case intervalSecond:
+		at = time.Duration(0)
+	}
+	return at
+}
+
+func (cron *cronExpression) getWeekday(t time.Time) time.Weekday {
+	return t.In(cron.timezone).Weekday()
+}
+
 func isValidHour(hour int) bool {
-	return (hour > 0) && (hour < 24)
+	return (hour >= 0) && (hour < 24)
 }
 
 func isValidMinute(minute int) bool {
-	return (minute > 0) && (minute < 60)
+	return (minute >= 0) && (minute < 60)
 }
 
 func isValidSecond(second int) bool {
-	return (second > 0) && (second < 60)
+	return (second >= 0) && (second < 60)
 }

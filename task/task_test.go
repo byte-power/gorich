@@ -16,7 +16,7 @@ func TestOnceJob(t *testing.T) {
 	name := "test_job"
 	job := Once(name, func(a, b int) int { return a + b }, 10, 20)
 	assert.True(t, job.IsRunnable(time.Now()))
-	assert.Equal(t, 1, defaultScheduler.jobCount())
+	assert.Equal(t, 1, defaultScheduler.JobCount())
 
 	job.Delay(2 * time.Second)
 	assert.False(t, job.IsRunnable(time.Now()))
@@ -36,6 +36,32 @@ func TestPeroidicJob(t *testing.T) {
 	runnable := job.IsRunnable(time.Now())
 	assert.False(t, runnable)
 
+}
+
+func TestPeroidicJobTimeZone(t *testing.T) {
+	defer emptyScheduler()
+	// loc1 is UTC+8
+	loc1, _ := time.LoadLocation("Asia/Shanghai")
+	// loc2 is UTC
+	loc2, _ := time.LoadLocation("UTC")
+	// loc3 is UTC-6
+	loc3 := time.FixedZone("UTC-6", -6*60*60)
+
+	name := "test_job"
+	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job.EveryDays(1).SetTimeZone(loc1).AtHourInDay(10, 0, 0)
+
+	t1 := time.Date(2019, time.November, 2, 10, 0, 0, 0, loc1)
+	assert.True(t, job.IsRunnable(t1))
+
+	t2 := time.Date(2019, time.November, 2, 10, 0, 0, 0, loc2)
+	assert.False(t, job.IsRunnable(t2))
+
+	t3 := time.Date(2019, time.November, 2, 2, 0, 0, 0, loc2)
+	assert.True(t, job.IsRunnable(t3))
+
+	t4 := time.Date(2019, time.November, 1, 20, 0, 0, 0, loc3)
+	assert.True(t, job.IsRunnable(t4))
 }
 
 func TestPeroidicJobNoAtTime(t *testing.T) {
