@@ -339,14 +339,14 @@ func (job *OnceJob) Run(t time.Time) {
 
 type PeriodicJob struct {
 	commonJob
-	cron        *Cron
+	cron        *cronExpression
 	coordinator *Coordinator
 }
 
 func NewPeriodicJob(name string, function interface{}, params []interface{}) *PeriodicJob {
 	return &PeriodicJob{
 		commonJob: commonJob{name: name, function: function, params: params},
-		cron:      &Cron{timezone: time.Local},
+		cron:      &cronExpression{timezone: time.Local},
 	}
 }
 
@@ -602,7 +602,7 @@ func (intervalType IntervalType) IsZero() bool {
 	return intervalType == ""
 }
 
-type Cron struct {
+type cronExpression struct {
 	interval     int
 	intervalType IntervalType
 	weekDay      time.Weekday
@@ -610,12 +610,12 @@ type Cron struct {
 	timezone     *time.Location
 }
 
-func newCron(interval int, intervalType IntervalType, at time.Duration, timezone *time.Location) *Cron {
+func newCron(interval int, intervalType IntervalType, at time.Duration, timezone *time.Location) *cronExpression {
 	// interval less or euqual to 0 will be set to 1.
 	if interval <= 0 {
 		interval = 1
 	}
-	return &Cron{
+	return &cronExpression{
 		interval:     interval,
 		intervalType: intervalType,
 		at:           at,
@@ -623,26 +623,26 @@ func newCron(interval int, intervalType IntervalType, at time.Duration, timezone
 	}
 }
 
-func EverySeconds(second int) *Cron {
+func EverySeconds(second int) *cronExpression {
 	return newCron(second, intervalSecond, 0, time.Local)
 }
 
-func EveryMinutes(minute int) *Cron {
+func EveryMinutes(minute int) *cronExpression {
 	return newCron(minute, intervalMinute, 0, time.Local)
 }
 
-func EveryHours(hour int) *Cron {
+func EveryHours(hour int) *cronExpression {
 	return newCron(hour, intervalHour, 0, time.Local)
 }
 
-func EveryDays(day int) *Cron {
+func EveryDays(day int) *cronExpression {
 	return newCron(day, intervalDay, 0, time.Local)
 }
 
-func (cron *Cron) IsValid() bool {
+func (cron *cronExpression) IsValid() bool {
 	return (cron.interval != 0) && (!cron.intervalType.IsZero())
 }
-func (cron *Cron) AtHourInDay(hour, minute, second int) error {
+func (cron *cronExpression) AtHourInDay(hour, minute, second int) error {
 	if !isValidHour(hour) || !isValidMinute(minute) && !isValidSecond(second) {
 		return ErrTimeRange
 	}
@@ -650,7 +650,7 @@ func (cron *Cron) AtHourInDay(hour, minute, second int) error {
 	return nil
 }
 
-func (cron *Cron) AtMinuteInHour(minute, second int) error {
+func (cron *cronExpression) AtMinuteInHour(minute, second int) error {
 	if !isValidMinute(minute) || !isValidSecond(second) {
 		return ErrTimeRange
 	}
@@ -658,7 +658,7 @@ func (cron *Cron) AtMinuteInHour(minute, second int) error {
 	return nil
 }
 
-func (cron *Cron) AtSecondInMinute(second int) error {
+func (cron *cronExpression) AtSecondInMinute(second int) error {
 	if !isValidSecond(second) {
 		return ErrTimeRange
 	}
@@ -666,7 +666,7 @@ func (cron *Cron) AtSecondInMinute(second int) error {
 	return nil
 }
 
-func (cron *Cron) IntervalDuration() time.Duration {
+func (cron *cronExpression) IntervalDuration() time.Duration {
 	var duration time.Duration
 	switch cron.intervalType {
 	case intervalWeek:
