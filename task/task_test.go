@@ -29,6 +29,27 @@ func TestOnceJob(t *testing.T) {
 	assert.Len(t, jobStats, 1)
 }
 
+func TestOnceJobCoordinate(t *testing.T) {
+	defer emptyScheduler()
+	name := "test_once_job_coordinate"
+	coordinator := NewCoordinatorFromRedis("coordinator1", "localhost:6379")
+
+	scheduler1 := NewScheduler(10)
+	scheduler2 := NewScheduler(10)
+	function := func(a int) int { return a }
+
+	job1 := scheduler1.AddRunOnceJob(name, function, 1).Coordinate(coordinator)
+	job2 := scheduler2.AddRunOnceJob(name, function, 1).Coordinate(coordinator)
+
+	currentTime := time.Now()
+	assert.True(t, job1.IsRunnable(currentTime))
+	assert.True(t, job2.IsRunnable(currentTime))
+	job1.Run(currentTime)
+	assert.False(t, job1.IsRunnable(currentTime))
+	assert.False(t, job2.IsRunnable(currentTime))
+
+}
+
 func TestPeroidicJob(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"

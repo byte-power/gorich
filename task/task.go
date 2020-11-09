@@ -306,6 +306,7 @@ type commonJob struct {
 	scheduledTime time.Time
 	jobStats      []JobStat
 	jobStatLock   sync.Mutex
+	coordinator   *Coordinator
 }
 
 func (job *commonJob) Name() string {
@@ -334,6 +335,10 @@ func (job *commonJob) run(t time.Time) {
 	job.AddStat(stat)
 }
 
+func (job *commonJob) Coordinate(coordinator *Coordinator) {
+	job.coordinator = coordinator
+}
+
 type OnceJob struct {
 	commonJob
 	delay                 time.Duration
@@ -358,7 +363,29 @@ func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 }
 
 func (job *OnceJob) IsRunnable(t time.Time) bool {
-	return !job.expectedScheduledTime.After(t) && !job.scheduled
+	var isRunnable bool
+	if !job.expectedScheduledTime.After(t) && !job.scheduled {
+		isRunnable = true
+	}
+	if isRunnable && job.coordinator != nil {
+		ok, scheduledTime, err := job.coordinator.checkRunnableAndGetLastScheduledTime(job.name)
+		if err != nil {
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
+			job.AddStat(jobStat)
+			isRunnable = false
+		} else {
+			isRunnable = ok
+			if !ok && !scheduledTime.IsZero() {
+				job.ScheduledAt(scheduledTime)
+			}
+		}
+	}
+	return isRunnable
+}
+
+func (job *OnceJob) Coordinate(coordinator *Coordinator) *OnceJob {
+	job.commonJob.Coordinate(coordinator)
+	return job
 }
 
 func (job *OnceJob) ScheduledAt(t time.Time) {
@@ -368,14 +395,27 @@ func (job *OnceJob) ScheduledAt(t time.Time) {
 
 func (job *OnceJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
+	if job.coordinator != nil {
+		scheduledTime := t.Truncate(time.Second)
+		canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
+		if err != nil {
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
+			job.AddStat(jobStat)
+			return
+		}
+		if !canBeScheduled {
+			jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
+			job.AddStat(jobStat)
+			return
+		}
+	}
 	job.ScheduledAt(t)
 	job.commonJob.run(t)
 }
 
 type PeriodicJob struct {
 	commonJob
-	cron        *cronExpression
-	coordinator *Coordinator
+	cron *cronExpression
 }
 
 func NewPeriodicJob(name string, function interface{}, params []interface{}) *PeriodicJob {
@@ -408,12 +448,13 @@ func (job *PeriodicJob) IsRunnable(t time.Time) bool {
 		if err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
 			job.AddStat(jobStat)
-			return false
+			isRunnable = false
+		} else {
+			isRunnable = ok
+			if !ok && !scheduledTime.IsZero() {
+				job.ScheduledAt(scheduledTime)
+			}
 		}
-		if !ok && !scheduledTime.IsZero() {
-			job.ScheduledAt(scheduledTime)
-		}
-		isRunnable = ok
 	}
 	return isRunnable
 }
@@ -423,7 +464,7 @@ func (job *PeriodicJob) ScheduledAt(t time.Time) {
 }
 
 func (job *PeriodicJob) Coordinate(coordinator *Coordinator) *PeriodicJob {
-	job.coordinator = coordinator
+	job.commonJob.Coordinate(coordinator)
 	return job
 }
 
