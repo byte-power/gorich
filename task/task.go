@@ -264,36 +264,56 @@ type Job interface {
 	AddStat(stat JobStat)
 }
 
+type commonJob struct {
+	name          string
+	function      interface{}
+	params        []interface{}
+	scheduledTime time.Time
+	jobStats      []JobStat
+	jobStatLock   sync.Mutex
+}
+
+func (job *commonJob) Name() string {
+	return job.name
+}
+
+func (job *commonJob) Stats() []JobStat {
+	return job.jobStats
+}
+
+func (job *commonJob) AddStat(stat JobStat) {
+	job.jobStatLock.Lock()
+	defer job.jobStatLock.Unlock()
+	job.jobStats = append(job.jobStats, stat)
+	if len(job.jobStats) > maxStatsCount {
+		job.jobStats = job.jobStats[len(job.jobStats)-maxStatsCount:]
+	}
+}
+
+func (job *commonJob) run(t time.Time) {
+	t = t.Truncate(time.Second)
+	startTime := time.Now()
+	stat := runJobFunctionAndGetJobStat(job.function, job.params)
+	stat.RunDuration = time.Now().Sub(startTime)
+	stat.ScheduledTime = t
+	job.AddStat(stat)
+}
+
 type OnceJob struct {
-	name                  string
-	function              interface{}
-	params                []interface{}
+	commonJob
 	delay                 time.Duration
-	timer                 *time.Timer
 	scheduled             bool
 	expectedScheduledTime time.Time
-	scheduledTime         time.Time
-	jobStats              []JobStat
 	jobStatLock           sync.Mutex
 }
 
 func NewOnceJob(name string, function interface{}, params []interface{}) *OnceJob {
 	job := &OnceJob{
-		name:                  name,
-		function:              function,
-		params:                params,
+		commonJob:             commonJob{name: name, function: function, params: params},
 		delay:                 0,
 		expectedScheduledTime: time.Now().Truncate(time.Second),
 	}
 	return job
-}
-
-func (job *OnceJob) Name() string {
-	return job.name
-}
-
-func (job *OnceJob) Stats() []JobStat {
-	return job.jobStats
 }
 
 func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
@@ -313,50 +333,21 @@ func (job *OnceJob) ScheduledAt(t time.Time) {
 
 func (job *OnceJob) Run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
-	t = t.Truncate(time.Second)
 	job.ScheduledAt(t)
-	startTime := time.Now()
-	stat := runJobFunctionAndGetJobStat(job.function, job.params)
-	stat.RunDuration = time.Now().Sub(startTime)
-	stat.ScheduledTime = t
-	job.AddStat(stat)
-}
-
-func (job *OnceJob) AddStat(stat JobStat) {
-	job.jobStatLock.Lock()
-	defer job.jobStatLock.Unlock()
-	job.jobStats = append(job.jobStats, stat)
-	if len(job.jobStats) > maxStatsCount {
-		job.jobStats = job.jobStats[len(job.jobStats)-maxStatsCount:]
-	}
+	job.commonJob.run(t)
 }
 
 type PeriodicJob struct {
-	name          string
-	function      interface{}
-	params        []interface{}
-	cron          *Cron
-	scheduledTime time.Time
-	jobStats      []JobStat
-	jobStatLock   sync.Mutex
-	coordinator   *Coordinator
+	commonJob
+	cron        *Cron
+	coordinator *Coordinator
 }
 
 func NewPeriodicJob(name string, function interface{}, params []interface{}) *PeriodicJob {
 	return &PeriodicJob{
-		name:     name,
-		function: function,
-		params:   params,
-		cron:     &Cron{timezone: time.Local},
+		commonJob: commonJob{name: name, function: function, params: params},
+		cron:      &Cron{timezone: time.Local},
 	}
-}
-
-func (job *PeriodicJob) Name() string {
-	return job.name
-}
-
-func (job *PeriodicJob) Stats() []JobStat {
-	return job.jobStats
 }
 
 func (job *PeriodicJob) IsRunnable(t time.Time) bool {
@@ -547,11 +538,7 @@ func (job *PeriodicJob) Run(t time.Time) {
 		}
 	}
 	job.ScheduledAt(t)
-	startTime := time.Now()
-	stat := runJobFunctionAndGetJobStat(job.function, job.params)
-	stat.RunDuration = time.Now().Sub(startTime)
-	stat.ScheduledTime = t
-	job.AddStat(stat)
+	job.commonJob.run(t)
 }
 
 func interfaceToError(i interface{}) error {
@@ -565,15 +552,6 @@ func interfaceToError(i interface{}) error {
 		err = fmt.Errorf("%+v", v)
 	}
 	return err
-}
-
-func (job *PeriodicJob) AddStat(stat JobStat) {
-	job.jobStatLock.Lock()
-	defer job.jobStatLock.Unlock()
-	job.jobStats = append(job.jobStats, stat)
-	if len(job.jobStats) > maxStatsCount {
-		job.jobStats = job.jobStats[len(job.jobStats)-maxStatsCount:]
-	}
 }
 
 func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) (stat JobStat) {
