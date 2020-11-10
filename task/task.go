@@ -64,7 +64,7 @@ func RemoveJob(name string) {
 	defaultScheduler.RemoveJob(name)
 }
 
-func ClearJobs() {
+func RemoveAllJobs() {
 	defaultScheduler.ClearJobs()
 }
 
@@ -110,7 +110,7 @@ func (scheduler *Scheduler) getRunnableJobs(t time.Time) []Job {
 	scheduler.jobLock.RLock()
 	defer scheduler.jobLock.RUnlock()
 	for _, job := range scheduler.jobs {
-		if job.IsRunnable(t) {
+		if job.isRunnable(t) {
 			runnableJobs = append(runnableJobs, job)
 		}
 	}
@@ -155,7 +155,7 @@ func (scheduler *Scheduler) Stop(force bool) {
 		return
 	}
 	for {
-		runningCount := scheduler.RunningJobCount()
+		runningCount := scheduler.runningJobCount()
 		if runningCount > 0 {
 			log.Printf("waiting %d jobs to finish...\n", runningCount)
 		} else {
@@ -166,7 +166,7 @@ func (scheduler *Scheduler) Stop(force bool) {
 	}
 }
 
-func (scheduler *Scheduler) RunningJobCount() int {
+func (scheduler *Scheduler) runningJobCount() int {
 	return scheduler.workerPool.Running()
 }
 
@@ -176,7 +176,7 @@ func (scheduler *Scheduler) runJobs(t time.Time) {
 		function := func() {
 			channel := make(chan bool, 1)
 			go func() {
-				job.Run(t)
+				job.run(t)
 				channel <- true
 			}()
 			select {
@@ -189,12 +189,12 @@ func (scheduler *Scheduler) runJobs(t time.Time) {
 					ScheduledTime: t,
 					RunDuration:   jobMaxExecutionDuration,
 				}
-				job.AddStat(jobStat)
+				job.addStat(jobStat)
 			}
 		}
 		if err := scheduler.workerPool.Submit(function); err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
-			job.AddStat(jobStat)
+			job.addStat(jobStat)
 		}
 	}
 }
@@ -300,12 +300,13 @@ func (stat JobStat) ToMap() map[string]interface{} {
 
 type Job interface {
 	Name() string
-	IsRunnable(time.Time) bool
-	ScheduledAt(time.Time)
-	Run(time.Time)
 	Stats() []JobStat
-	AddStat(stat JobStat)
 	GetLatestScheduledTime() time.Time
+
+	isRunnable(time.Time) bool
+	scheduledAt(time.Time)
+	run(time.Time)
+	addStat(stat JobStat)
 }
 
 type commonJob struct {
@@ -326,7 +327,7 @@ func (job *commonJob) Stats() []JobStat {
 	return job.jobStats
 }
 
-func (job *commonJob) AddStat(stat JobStat) {
+func (job *commonJob) addStat(stat JobStat) {
 	job.jobStatLock.Lock()
 	defer job.jobStatLock.Unlock()
 	job.jobStats = append(job.jobStats, stat)
@@ -345,7 +346,7 @@ func (job *commonJob) run(t time.Time) {
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
 	stat.RunDuration = time.Now().Sub(startTime)
 	stat.ScheduledTime = t
-	job.AddStat(stat)
+	job.addStat(stat)
 }
 
 func (job *commonJob) setCoordinate(coordinator *Coordinator) {
@@ -360,12 +361,12 @@ func (job *commonJob) coordinate(t time.Time) bool {
 	canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
 	if err != nil {
 		jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
-		job.AddStat(jobStat)
+		job.addStat(jobStat)
 		return false
 	}
 	if !canBeScheduled {
 		jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
-		job.AddStat(jobStat)
+		job.addStat(jobStat)
 		return false
 	}
 	return true
@@ -394,25 +395,25 @@ func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 	return job
 }
 
-func (job *OnceJob) IsRunnable(t time.Time) bool {
-	var isRunnable bool
+func (job *OnceJob) isRunnable(t time.Time) bool {
+	var runnable bool
 	if !job.expectedScheduledTime.After(t) && !job.scheduled {
-		isRunnable = true
+		runnable = true
 	}
-	if isRunnable && job.coordinator != nil {
+	if runnable && job.coordinator != nil {
 		ok, scheduledTime, err := job.coordinator.checkRunnableAndGetLastScheduledTime(job.name)
 		if err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
-			job.AddStat(jobStat)
-			isRunnable = false
+			job.addStat(jobStat)
+			runnable = false
 		} else {
-			isRunnable = ok
+			runnable = ok
 			if !ok && !scheduledTime.IsZero() {
-				job.ScheduledAt(scheduledTime)
+				job.scheduledAt(scheduledTime)
 			}
 		}
 	}
-	return isRunnable
+	return runnable
 }
 
 func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
@@ -420,15 +421,15 @@ func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
 	return job
 }
 
-func (job *OnceJob) ScheduledAt(t time.Time) {
+func (job *OnceJob) scheduledAt(t time.Time) {
 	job.scheduledTime = t.Truncate(time.Second)
 	job.scheduled = true
 }
 
-func (job *OnceJob) Run(t time.Time) {
+func (job *OnceJob) run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
 	if job.coordinate(t) {
-		job.ScheduledAt(t)
+		job.scheduledAt(t)
 		job.commonJob.run(t)
 	}
 }
@@ -445,41 +446,41 @@ func NewPeriodicJob(name string, function interface{}, params []interface{}) *Pe
 	}
 }
 
-func (job *PeriodicJob) IsRunnable(t time.Time) bool {
-	if !job.cron.IsValid() {
+func (job *PeriodicJob) isRunnable(t time.Time) bool {
+	if !job.cron.isValid() {
 		return false
 	}
-	isRunnable := job.cron.isMatched(t)
-	if !isRunnable {
+	runnable := job.cron.isMatched(t)
+	if !runnable {
 		return false
 	}
 	// scheduledTime.IsZero == true if the job has not been sheduled yet.
 	if !job.scheduledTime.IsZero() {
 		scheduledTime := job.scheduledTime.Truncate(time.Second)
 		roundCurrentTime := t.Truncate(time.Second)
-		if !roundCurrentTime.Before(scheduledTime.Add(job.cron.IntervalDuration())) {
-			isRunnable = true
+		if !roundCurrentTime.Before(scheduledTime.Add(job.cron.intervalDuration())) {
+			runnable = true
 		} else {
-			isRunnable = false
+			runnable = false
 		}
 	}
-	if isRunnable && job.coordinator != nil {
+	if runnable && job.coordinator != nil {
 		ok, scheduledTime, err := job.coordinator.checkRunnableAndGetLastScheduledTime(job.name)
 		if err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
-			job.AddStat(jobStat)
-			isRunnable = false
+			job.addStat(jobStat)
+			runnable = false
 		} else {
-			isRunnable = ok
+			runnable = ok
 			if !ok && !scheduledTime.IsZero() {
-				job.ScheduledAt(scheduledTime)
+				job.scheduledAt(scheduledTime)
 			}
 		}
 	}
-	return isRunnable
+	return runnable
 }
 
-func (job *PeriodicJob) ScheduledAt(t time.Time) {
+func (job *PeriodicJob) scheduledAt(t time.Time) {
 	job.scheduledTime = t.Truncate(time.Second)
 }
 
@@ -569,14 +570,14 @@ func (job *PeriodicJob) AtHourInDay(hour, minute, second int) (*PeriodicJob, err
 }
 
 func (job *PeriodicJob) AtMinuteInHour(minute, second int) (*PeriodicJob, error) {
-	if err := job.cron.AtMinuteInHour(minute, second); err != nil {
+	if err := job.cron.atMinuteInHour(minute, second); err != nil {
 		return nil, err
 	}
 	return job, nil
 }
 
 func (job *PeriodicJob) AtSecondInMinute(second int) (*PeriodicJob, error) {
-	if err := job.cron.AtSecondInMinute(second); err != nil {
+	if err := job.cron.atSecondInMinute(second); err != nil {
 		return nil, err
 	}
 	return job, nil
@@ -587,10 +588,10 @@ func (job *PeriodicJob) SetTimeZone(tz *time.Location) *PeriodicJob {
 	return job
 }
 
-func (job *PeriodicJob) Run(t time.Time) {
+func (job *PeriodicJob) run(t time.Time) {
 	log.Printf("run job: %s\n", job.name)
 	if job.coordinate(t) {
-		job.ScheduledAt(t)
+		job.scheduledAt(t)
 		job.commonJob.run(t)
 	}
 }
@@ -652,7 +653,7 @@ const (
 	intervalMonth  IntervalType = "month"
 )
 
-func (intervalType IntervalType) IsZero() bool {
+func (intervalType IntervalType) isZero() bool {
 	return intervalType == ""
 }
 
@@ -677,24 +678,8 @@ func newCron(interval int, intervalType IntervalType, at time.Duration, timezone
 	}
 }
 
-func EverySeconds(second int) *cronExpression {
-	return newCron(second, intervalSecond, 0, time.Local)
-}
-
-func EveryMinutes(minute int) *cronExpression {
-	return newCron(minute, intervalMinute, 0, time.Local)
-}
-
-func EveryHours(hour int) *cronExpression {
-	return newCron(hour, intervalHour, 0, time.Local)
-}
-
-func EveryDays(day int) *cronExpression {
-	return newCron(day, intervalDay, 0, time.Local)
-}
-
-func (cron *cronExpression) IsValid() bool {
-	return (cron.interval != 0) && (!cron.intervalType.IsZero())
+func (cron *cronExpression) isValid() bool {
+	return (cron.interval != 0) && (!cron.intervalType.isZero())
 }
 func (cron *cronExpression) AtHourInDay(hour, minute, second int) error {
 	if !isValidHour(hour) || !isValidMinute(minute) && !isValidSecond(second) {
@@ -704,7 +689,7 @@ func (cron *cronExpression) AtHourInDay(hour, minute, second int) error {
 	return nil
 }
 
-func (cron *cronExpression) AtMinuteInHour(minute, second int) error {
+func (cron *cronExpression) atMinuteInHour(minute, second int) error {
 	if !isValidMinute(minute) || !isValidSecond(second) {
 		return ErrTimeRange
 	}
@@ -712,7 +697,7 @@ func (cron *cronExpression) AtMinuteInHour(minute, second int) error {
 	return nil
 }
 
-func (cron *cronExpression) AtSecondInMinute(second int) error {
+func (cron *cronExpression) atSecondInMinute(second int) error {
 	if !isValidSecond(second) {
 		return ErrTimeRange
 	}
@@ -724,7 +709,7 @@ func (cron *cronExpression) setTimeZone(tz *time.Location) {
 	cron.timezone = tz
 }
 
-func (cron *cronExpression) IntervalDuration() time.Duration {
+func (cron *cronExpression) intervalDuration() time.Duration {
 	var duration time.Duration
 	switch cron.intervalType {
 	case intervalWeek:
