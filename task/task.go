@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -40,6 +41,7 @@ type Scheduler struct {
 	jobLock    sync.RWMutex
 	workerPool *ants.Pool
 	stop       chan bool
+	started    int32
 }
 
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
@@ -50,11 +52,11 @@ func Periodic(name string, function interface{}, params ...interface{}) *Periodi
 	return defaultScheduler.AddPeriodicJob(name, function, params...)
 }
 
-func Start() {
+func StartScheduler() {
 	defaultScheduler.Start()
 }
 
-func Stop(force bool) {
+func StopScheduler(force bool) {
 	defaultScheduler.Stop(force)
 }
 
@@ -128,6 +130,9 @@ func (scheduler *Scheduler) ClearJobs() {
 }
 
 func (scheduler *Scheduler) Start() {
+	if !atomic.CompareAndSwapInt32(&scheduler.started, 0, 1) {
+		return
+	}
 	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
@@ -141,6 +146,9 @@ func (scheduler *Scheduler) Start() {
 }
 
 func (scheduler *Scheduler) Stop(force bool) {
+	if !atomic.CompareAndSwapInt32(&scheduler.started, 1, 0) {
+		return
+	}
 	scheduler.stop <- true
 	if force {
 		scheduler.workerPool.Release()
