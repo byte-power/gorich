@@ -1,3 +1,13 @@
+/*
+Package task implements a task scheduler.
+One task is mapped to a job and scheduled by a scheduler.
+
+There are two scheduler strategies:
+
+1) run only once at a specific time
+
+2) run periodically
+*/
 package task
 
 import (
@@ -24,18 +34,24 @@ const (
 )
 
 var (
+	// ErrRaceCondition means conflict condition happens when coordinated.
 	ErrRaceCondition = errors.New("race condition when coordination")
 
+	// ErrTimeRange means time range error.
 	ErrTimeRange = errors.New("time range is invalid")
 
+	// ErrJobTimeout means job's executed time exceeds `jobMaxExecutionDuration`(1 hour).
 	ErrJobTimeout = errors.New("job is timeout")
 
-	ErrNotFunctionType       = errors.New("job's function is not function type")
-	ErrFunctionArityNotMatch = errors.New("job's function arity does not match given parameters")
+	// ErrNotFunctionType means job's function is not function type.
+	ErrNotFunctionType = errors.New("job's function is not function type")
+	// ErrFunctionArityNotMatch means function arity(the number of parameters) does not match given arguments
+	ErrFunctionArityNotMatch = errors.New("job's function arity does not match given arguments")
 )
 
 var defaultScheduler = NewScheduler(defaultConcurrentWorkerCount)
 
+// Scheduler represents a scheduler.
 type Scheduler struct {
 	jobs       map[string]Job
 	jobLock    sync.RWMutex
@@ -44,34 +60,47 @@ type Scheduler struct {
 	started    int32
 }
 
+// Once adds a job to the default scheduler, and the job only run once.
 func Once(name string, function interface{}, params ...interface{}) *OnceJob {
 	return defaultScheduler.AddRunOnceJob(name, function, params...)
 }
 
+// Periodic add a job to the default scheduler, and the job run periodically.
 func Periodic(name string, function interface{}, params ...interface{}) *PeriodicJob {
 	return defaultScheduler.AddPeriodicJob(name, function, params...)
 }
 
+// StartScheduler starts the default scheduler.
 func StartScheduler() {
 	defaultScheduler.Start()
 }
 
+// StopScheduler stops the default scheduler.
 func StopScheduler(force bool) {
 	defaultScheduler.Stop(force)
 }
 
+// RemoveJob removes a job by name from the default scheduler.
 func RemoveJob(name string) {
 	defaultScheduler.RemoveJob(name)
 }
 
+// RemoveAllJobs removes all jobs from the default scheduler.
 func RemoveAllJobs() {
-	defaultScheduler.ClearJobs()
+	defaultScheduler.RemoveAllJobs()
 }
 
+// JobCount returns the number of jobs in the default scheduler.
 func JobCount() int {
 	return defaultScheduler.JobCount()
 }
 
+// JobStats returns all jobs' statistics in the default scheduler.
+func JobStats() map[string][]JobStat {
+	return defaultScheduler.JobStats()
+}
+
+// NewScheduler create a scheduler, and at most `workerCount` jobs can run concurrently in this scheduler.
 func NewScheduler(workerCount int) Scheduler {
 	pool, err := ants.NewPool(workerCount, ants.WithNonblocking(true))
 	if err != nil {
@@ -85,10 +114,12 @@ func NewScheduler(workerCount int) Scheduler {
 	}
 }
 
+// JobCount returns the number of jobs in the current scheduler
 func (scheduler *Scheduler) JobCount() int {
 	return len(scheduler.jobs)
 }
 
+// AddPeriodicJob add a job to the current scheduler, and the job run periodically.
 func (scheduler *Scheduler) AddPeriodicJob(name string, function interface{}, params ...interface{}) *PeriodicJob {
 	job := NewPeriodicJob(name, function, params)
 	scheduler.jobLock.Lock()
@@ -97,6 +128,7 @@ func (scheduler *Scheduler) AddPeriodicJob(name string, function interface{}, pa
 	return job
 }
 
+// AddRunOnceJob adds a job to the current scheduler, and the job only run once.
 func (scheduler *Scheduler) AddRunOnceJob(name string, function interface{}, params ...interface{}) *OnceJob {
 	job := NewOnceJob(name, function, params)
 	scheduler.jobLock.Lock()
@@ -117,18 +149,21 @@ func (scheduler *Scheduler) getRunnableJobs(t time.Time) []Job {
 	return runnableJobs
 }
 
+// RemoveJob removes a job by name from the current scheduler.
 func (scheduler *Scheduler) RemoveJob(name string) {
 	scheduler.jobLock.Lock()
 	defer scheduler.jobLock.Unlock()
 	delete(scheduler.jobs, name)
 }
 
-func (scheduler *Scheduler) ClearJobs() {
+// RemoveAllJobs removes all jobs from the current scheduler.
+func (scheduler *Scheduler) RemoveAllJobs() {
 	scheduler.jobLock.Lock()
 	defer scheduler.jobLock.Unlock()
 	scheduler.jobs = make(map[string]Job, 0)
 }
 
+// Start starts the current scheduler.
 func (scheduler *Scheduler) Start() {
 	if !atomic.CompareAndSwapInt32(&scheduler.started, 0, 1) {
 		return
@@ -145,6 +180,7 @@ func (scheduler *Scheduler) Start() {
 	}
 }
 
+// Stop stops the current scheduler.
 func (scheduler *Scheduler) Stop(force bool) {
 	if !atomic.CompareAndSwapInt32(&scheduler.started, 1, 0) {
 		return
@@ -199,6 +235,7 @@ func (scheduler *Scheduler) runJobs(t time.Time) {
 	}
 }
 
+// JobStats returns all jobs' statistics in the current scheduler.
 func (scheduler *Scheduler) JobStats() map[string][]JobStat {
 	jobStats := make(map[string][]JobStat, len(scheduler.jobs))
 	scheduler.jobLock.RLock()
@@ -218,6 +255,7 @@ const (
 	redisClusterMode    = "cluster"
 )
 
+// Coordinator represents a coordinator.
 type Coordinator struct {
 	name               string
 	redisMode          string
@@ -225,16 +263,19 @@ type Coordinator struct {
 	redisClusterClient *redis.ClusterClient
 }
 
+// NewCoordinatorFromRedis creates a coordinator based on standalone redis.
 func NewCoordinatorFromRedis(name, address string) *Coordinator {
 	redisClient := redis.NewClient(&redis.Options{Addr: address})
 	return &Coordinator{name: name, redisMode: redisStandaloneMode, redisClient: redisClient}
 }
 
+// NewCoordinatorFromRedisCluster creates a coordinator based on redis cluster.
 func NewCoordinatorFromRedisCluster(name string, addrs []string) *Coordinator {
 	redisClusterClient := redis.NewClusterClient(&redis.ClusterOptions{Addrs: addrs})
 	return &Coordinator{name: name, redisMode: redisClusterMode, redisClusterClient: redisClusterClient}
 }
 
+// Coordinate coordinates a job by name at scheduledTime.
 func (coordinator *Coordinator) Coordinate(name string, scheduledTime time.Time) (ok bool, err error) {
 	key := coordinator.getCoordinatorKey(name)
 	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
@@ -278,10 +319,7 @@ func (coordinator *Coordinator) checkRunnableAndGetLastScheduledTime(name string
 	return
 }
 
-func JobStats() map[string][]JobStat {
-	return defaultScheduler.JobStats()
-}
-
+// JobStat represents the running statistics of a job.
 type JobStat struct {
 	IsSuccess     bool
 	Err           error
@@ -289,6 +327,7 @@ type JobStat struct {
 	ScheduledTime time.Time
 }
 
+// ToMap converts a JobStat struct to a map.
 func (stat JobStat) ToMap() map[string]interface{} {
 	return map[string]interface{}{
 		"success":       stat.IsSuccess,
@@ -298,6 +337,7 @@ func (stat JobStat) ToMap() map[string]interface{} {
 	}
 }
 
+// Job represents a job
 type Job interface {
 	Name() string
 	Stats() []JobStat
@@ -319,10 +359,12 @@ type commonJob struct {
 	coordinator   *Coordinator
 }
 
+// Name returns a job's name.
 func (job *commonJob) Name() string {
 	return job.name
 }
 
+// Stats returns a job's running statistics.
 func (job *commonJob) Stats() []JobStat {
 	return job.jobStats
 }
@@ -336,6 +378,8 @@ func (job *commonJob) addStat(stat JobStat) {
 	}
 }
 
+// GetLatestScheduledTime returns job's latest scheduled time,
+// returns time.Time{} if is not scheduled yet.
 func (job *commonJob) GetLatestScheduledTime() time.Time {
 	return job.scheduledTime
 }
@@ -372,6 +416,7 @@ func (job *commonJob) coordinate(t time.Time) bool {
 	return true
 }
 
+// OnceJob represents a job running only once.
 type OnceJob struct {
 	commonJob
 	delay                 time.Duration
@@ -380,6 +425,7 @@ type OnceJob struct {
 	jobStatLock           sync.Mutex
 }
 
+// NewOnceJob creates a OnceJob.
 func NewOnceJob(name string, function interface{}, params []interface{}) *OnceJob {
 	job := &OnceJob{
 		commonJob:             commonJob{name: name, function: function, params: params},
@@ -389,6 +435,7 @@ func NewOnceJob(name string, function interface{}, params []interface{}) *OnceJo
 	return job
 }
 
+// Delay set the delayed duration from now for the current OnceJob.
 func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 	job.delay = delay
 	job.expectedScheduledTime = time.Now().Add(delay).Truncate(time.Second)
@@ -416,6 +463,7 @@ func (job *OnceJob) isRunnable(t time.Time) bool {
 	return runnable
 }
 
+// SetCoordinate sets coordinator for the current job.
 func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
 	job.commonJob.setCoordinate(coordinator)
 	return job
@@ -434,11 +482,13 @@ func (job *OnceJob) run(t time.Time) {
 	}
 }
 
+// PeriodicJob represents a job running periodically.
 type PeriodicJob struct {
 	commonJob
 	cron *cronExpression
 }
 
+// NewPeriodicJob creates a PeriodicJob.
 func NewPeriodicJob(name string, function interface{}, params []interface{}) *PeriodicJob {
 	return &PeriodicJob{
 		commonJob: commonJob{name: name, function: function, params: params},
@@ -484,35 +534,41 @@ func (job *PeriodicJob) scheduledAt(t time.Time) {
 	job.scheduledTime = t.Truncate(time.Second)
 }
 
+// SetCoordinate sets coordinator for the current job.
 func (job *PeriodicJob) SetCoordinate(coordinator *Coordinator) *PeriodicJob {
 	job.commonJob.setCoordinate(coordinator)
 	return job
 }
 
+// EverySeconds sets running period in seconds for the current job.
 func (job *PeriodicJob) EverySeconds(second int) *PeriodicJob {
 	job.cron.intervalType = intervalSecond
 	job.cron.interval = second
 	return job
 }
 
+// EveryMinutes sets running period in minutes for the current job.
 func (job *PeriodicJob) EveryMinutes(minute int) *PeriodicJob {
 	job.cron.intervalType = intervalMinute
 	job.cron.interval = minute
 	return job
 }
 
+// EveryHours sets running period in hours for the current job.
 func (job *PeriodicJob) EveryHours(hour int) *PeriodicJob {
 	job.cron.intervalType = intervalHour
 	job.cron.interval = hour
 	return job
 }
 
+// EveryDays sets running period in days for the current job.
 func (job *PeriodicJob) EveryDays(day int) *PeriodicJob {
 	job.cron.intervalType = intervalDay
 	job.cron.interval = day
 	return job
 }
 
+// EveryMondays sets running period in Mondays for the current job.
 func (job *PeriodicJob) EveryMondays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -520,6 +576,7 @@ func (job *PeriodicJob) EveryMondays(week int) *PeriodicJob {
 	return job
 }
 
+// EveryTuesdays sets running period in Tuesdays for the current job.
 func (job *PeriodicJob) EveryTuesdays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -527,6 +584,7 @@ func (job *PeriodicJob) EveryTuesdays(week int) *PeriodicJob {
 	return job
 }
 
+// EveryWednesdays sets running period in Wednesdays for the current job.
 func (job *PeriodicJob) EveryWednesdays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -534,6 +592,7 @@ func (job *PeriodicJob) EveryWednesdays(week int) *PeriodicJob {
 	return job
 }
 
+// EveryThursdays sets running period in Thursdays for the current job.
 func (job *PeriodicJob) EveryThursdays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -541,6 +600,7 @@ func (job *PeriodicJob) EveryThursdays(week int) *PeriodicJob {
 	return job
 }
 
+// EveryFridays sets running period in Fridays for the current job.
 func (job *PeriodicJob) EveryFridays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -548,6 +608,7 @@ func (job *PeriodicJob) EveryFridays(week int) *PeriodicJob {
 	return job
 }
 
+// EverySaturdays sets running period in Saturdays for the current job.
 func (job *PeriodicJob) EverySaturdays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -555,6 +616,7 @@ func (job *PeriodicJob) EverySaturdays(week int) *PeriodicJob {
 	return job
 }
 
+// EverySundays sets running period in Sundays for the current job.
 func (job *PeriodicJob) EverySundays(week int) *PeriodicJob {
 	job.cron.intervalType = intervalWeek
 	job.cron.interval = week
@@ -562,13 +624,15 @@ func (job *PeriodicJob) EverySundays(week int) *PeriodicJob {
 	return job
 }
 
+// AtHourInDay sets hour time for jobs running periodically in days.
 func (job *PeriodicJob) AtHourInDay(hour, minute, second int) (*PeriodicJob, error) {
-	if err := job.cron.AtHourInDay(hour, minute, second); err != nil {
+	if err := job.cron.atHourInDay(hour, minute, second); err != nil {
 		return nil, err
 	}
 	return job, nil
 }
 
+// AtMinuteInHour sets minute time for jobs running periodically in hours.
 func (job *PeriodicJob) AtMinuteInHour(minute, second int) (*PeriodicJob, error) {
 	if err := job.cron.atMinuteInHour(minute, second); err != nil {
 		return nil, err
@@ -576,6 +640,7 @@ func (job *PeriodicJob) AtMinuteInHour(minute, second int) (*PeriodicJob, error)
 	return job, nil
 }
 
+// AtSecondInMinute sets second time for jobs running periodically in minutes.
 func (job *PeriodicJob) AtSecondInMinute(second int) (*PeriodicJob, error) {
 	if err := job.cron.atSecondInMinute(second); err != nil {
 		return nil, err
@@ -583,6 +648,7 @@ func (job *PeriodicJob) AtSecondInMinute(second int) (*PeriodicJob, error) {
 	return job, nil
 }
 
+// SetTimeZone sets timezone for the current job.
 func (job *PeriodicJob) SetTimeZone(tz *time.Location) *PeriodicJob {
 	job.cron.setTimeZone(tz)
 	return job
@@ -681,7 +747,7 @@ func newCron(interval int, intervalType cronIntervalType, at time.Duration, time
 func (cron *cronExpression) isValid() bool {
 	return (cron.interval != 0) && (!cron.intervalType.isZero())
 }
-func (cron *cronExpression) AtHourInDay(hour, minute, second int) error {
+func (cron *cronExpression) atHourInDay(hour, minute, second int) error {
 	if !isValidHour(hour) || !isValidMinute(minute) && !isValidSecond(second) {
 		return ErrTimeRange
 	}
