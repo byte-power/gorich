@@ -1,22 +1,23 @@
-package task
+package task_test
 
 import (
 	"math"
 	"testing"
 	"time"
 
+	"github.com/byte-power/gorich/task"
 	"github.com/stretchr/testify/assert"
 )
 
 func emptyScheduler() {
-	ClearJobs()
+	task.ClearJobs()
 }
 func TestOnceJob(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Once(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Once(name, func(a, b int) int { return a + b }, 10, 20)
 	assert.True(t, job.IsRunnable(time.Now()))
-	assert.Equal(t, 1, defaultScheduler.JobCount())
+	assert.Equal(t, 1, task.JobCount())
 
 	job.Delay(2 * time.Second)
 	assert.False(t, job.IsRunnable(time.Now()))
@@ -32,10 +33,10 @@ func TestOnceJob(t *testing.T) {
 func TestOnceJobCoordinate(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_once_job_coordinate"
-	coordinator := NewCoordinatorFromRedis("coordinator1", "localhost:6379")
+	coordinator := task.NewCoordinatorFromRedis("coordinator1", "localhost:6379")
 
-	scheduler1 := NewScheduler(10)
-	scheduler2 := NewScheduler(10)
+	scheduler1 := task.NewScheduler(10)
+	scheduler2 := task.NewScheduler(10)
 	function := func(a int) int { return a }
 
 	job1 := scheduler1.AddRunOnceJob(name, function, 1).SetCoordinate(coordinator)
@@ -53,7 +54,7 @@ func TestOnceJobCoordinate(t *testing.T) {
 func TestPeroidicJob(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	runnable := job.IsRunnable(time.Now())
 	assert.False(t, runnable)
 
@@ -69,7 +70,7 @@ func TestPeroidicJobTimeZone(t *testing.T) {
 	loc3 := time.FixedZone("UTC-6", -6*60*60)
 
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	job.EveryDays(1).SetTimeZone(loc1).AtHourInDay(10, 0, 0)
 
 	t1 := time.Date(2019, time.November, 2, 10, 0, 0, 0, loc1)
@@ -88,7 +89,7 @@ func TestPeroidicJobTimeZone(t *testing.T) {
 func TestPeroidicJobNoAtTime(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	job.EveryMinutes(1)
 
 	executeTime := time.Date(2020, time.November, 2, 10, 10, 30, 0, time.Local)
@@ -106,7 +107,7 @@ func TestPeroidicJobNoAtTime(t *testing.T) {
 func TestPeroidicJobEveryDay(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	hour := 10
 	minute := 20
 	second := 30
@@ -132,7 +133,7 @@ func TestPeroidicJobEveryDay(t *testing.T) {
 func TestPeroidicJobEveryHour(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	minute := 20
 	second := 30
 	job.EveryHours(2).AtMinuteInHour(minute, second)
@@ -157,7 +158,7 @@ func TestPeroidicJobEveryHour(t *testing.T) {
 func TestPeroidicJobEveryMinute(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	second := 30
 	job.EveryMinutes(2).AtSecondInMinute(second)
 
@@ -181,7 +182,7 @@ func TestPeroidicJobEveryMinute(t *testing.T) {
 func TestPeroidicJobEveryWeekday(t *testing.T) {
 	defer emptyScheduler()
 	name := "test_job"
-	job := Periodic(name, func(a, b int) int { return a + b }, 10, 20)
+	job := task.Periodic(name, func(a, b int) int { return a + b }, 10, 20)
 	currentTime := time.Now()
 	hour := currentTime.Hour()
 	minute := int(math.Mod(float64(currentTime.Minute())+10, 60))
@@ -211,10 +212,10 @@ func TestPeroidicJobEveryWeekday(t *testing.T) {
 
 func TestPeriodicJobCoordinator(t *testing.T) {
 	defer emptyScheduler()
-	coordinator := NewCoordinatorFromRedis("coordinator1", "localhost:6379")
+	coordinator := task.NewCoordinatorFromRedis("coordinator1", "localhost:6379")
 
-	scheduler1 := NewScheduler(10)
-	scheduler2 := NewScheduler(10)
+	scheduler1 := task.NewScheduler(10)
+	scheduler2 := task.NewScheduler(10)
 	sum := 0
 	function := func(a int) { sum = sum + a }
 
@@ -226,10 +227,10 @@ func TestPeriodicJobCoordinator(t *testing.T) {
 	assert.True(t, job1.IsRunnable(currentTime))
 	assert.True(t, job2.IsRunnable(currentTime))
 	job1.Run(currentTime)
-	assert.True(t, currentTime.Truncate(time.Second).Equal(job1.scheduledTime))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job1.GetLatestScheduledTime()))
 	assert.False(t, job1.IsRunnable(currentTime))
 	assert.False(t, job2.IsRunnable(currentTime))
-	assert.True(t, currentTime.Truncate(time.Second).Equal(job2.scheduledTime))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job2.GetLatestScheduledTime()))
 
 	time.Sleep(5 * time.Second)
 	currentTime = time.Now()
@@ -238,6 +239,6 @@ func TestPeriodicJobCoordinator(t *testing.T) {
 	job2.Run(currentTime)
 	assert.False(t, job1.IsRunnable(currentTime))
 	assert.False(t, job2.IsRunnable(currentTime))
-	assert.True(t, currentTime.Truncate(time.Second).Equal(job1.scheduledTime))
-	assert.True(t, currentTime.Truncate(time.Second).Equal(job2.scheduledTime))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job1.GetLatestScheduledTime()))
+	assert.True(t, currentTime.Truncate(time.Second).Equal(job2.GetLatestScheduledTime()))
 }
