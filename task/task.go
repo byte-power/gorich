@@ -642,30 +642,30 @@ func runJobFunctionAndGetJobStat(function interface{}, params []interface{}) (st
 	return
 }
 
-type IntervalType string
+type cronIntervalType string
 
 const (
-	intervalSecond IntervalType = "second"
-	intervalMinute IntervalType = "minute"
-	intervalHour   IntervalType = "hour"
-	intervalDay    IntervalType = "day"
-	intervalWeek   IntervalType = "week"
-	intervalMonth  IntervalType = "month"
+	intervalSecond cronIntervalType = "second"
+	intervalMinute cronIntervalType = "minute"
+	intervalHour   cronIntervalType = "hour"
+	intervalDay    cronIntervalType = "day"
+	intervalWeek   cronIntervalType = "week"
+	intervalMonth  cronIntervalType = "month"
 )
 
-func (intervalType IntervalType) isZero() bool {
+func (intervalType cronIntervalType) isZero() bool {
 	return intervalType == ""
 }
 
 type cronExpression struct {
 	interval     int
-	intervalType IntervalType
+	intervalType cronIntervalType
 	weekDay      time.Weekday
 	at           time.Duration
 	timezone     *time.Location
 }
 
-func newCron(interval int, intervalType IntervalType, at time.Duration, timezone *time.Location) *cronExpression {
+func newCron(interval int, intervalType cronIntervalType, at time.Duration, timezone *time.Location) *cronExpression {
 	// interval less or euqual to 0 will be set to 1.
 	if interval <= 0 {
 		interval = 1
