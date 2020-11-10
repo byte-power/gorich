@@ -297,6 +297,7 @@ type Job interface {
 	Run(time.Time)
 	Stats() []JobStat
 	AddStat(stat JobStat)
+	GetLatestScheduledTime() time.Time
 }
 
 type commonJob struct {
@@ -324,6 +325,10 @@ func (job *commonJob) AddStat(stat JobStat) {
 	if len(job.jobStats) > maxStatsCount {
 		job.jobStats = job.jobStats[len(job.jobStats)-maxStatsCount:]
 	}
+}
+
+func (job *commonJob) GetLatestScheduledTime() time.Time {
+	return job.scheduledTime
 }
 
 func (job *commonJob) run(t time.Time) {
