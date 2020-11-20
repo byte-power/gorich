@@ -80,7 +80,7 @@ func sum(a, b int) int {
 }
 ```
 
-## 3. Job coordination
+## 3. job coordination
 
 When running periodic jobs in multiple servers, you can use Coordinate to coordinate running  and avoid unnecessary running.
 
