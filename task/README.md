@@ -12,6 +12,7 @@ Examples as below:
 package main
 
 import (
+    "time"
     "github.com/byte-power/gorich/task"
 )
 
@@ -49,6 +50,8 @@ You can also monitor the scheduled jobs via JobStats.
 package main
 
 import (
+    "fmt"
+    "time"
     "github.com/byte-power/gorich/task"
 )
 
@@ -65,13 +68,16 @@ func main() {
 }
 
 func monitorScheduler() {
-    // handle all job stats
-    allJobStats := task.JobStats()
-    for jobName, jobStats := range allJobStats {
-        fmt.Printf("job %s stat:\n", jobName)
-        for _, stat := range jobStats {
-            fmt.Println(stat.ToMap())
+    for {
+        // handle all job stats
+        allJobStats := task.JobStats()
+        for jobName, jobStats := range allJobStats {
+            fmt.Printf("job %s stat:\n", jobName)
+            for _, stat := range jobStats {
+                fmt.Println(stat.ToMap())
+            }
         }
+        time.Sleep(5 * time.Second)
     }
 }
 
@@ -90,6 +96,8 @@ Notice that Coordinate use a lock that will unlock automatically 5 seconds later
 package main
 
 import (
+    "fmt"
+    "time"
     "github.com/byte-power/gorich/task"
 )
 
@@ -110,22 +118,26 @@ func main () {
     go scheduler1.Start()
     go scheduler2.Start()
 
-    jobStats := job1.Stats()
-    fmt.Println("job1 stats:")
-    for _, stat := range jobStats {
-        fmt.Println(stat.ToMap())
-    }
+    go monitorJob(job1)
+    go monitorJob(job2)
 
-    jobStats = job2.Stats()
-    fmt.Println("job2 stats:")
-    for _, stat := range jobStats {
-        fmt.Println(stat.ToMap())
-    }
-    // stop schedulers after 10 seconds
-    time.Sleep(10 * time.Second)
+
+    // stop schedulers after 30 seconds
+    time.Sleep(30 * time.Second)
 
     scheduler1.Stop(false)
     scheduler2.Stop(false)
+}
+
+func monitorJob(job task.Job) {
+    for {
+        jobStats := job.Stats()
+        fmt.Printf("job  %s stats:\n", job.Name())
+        for _, stat := range jobStats {
+            fmt.Println(stat.ToMap())
+        }
+        time.Sleep(5 * time.Second)
+    }
 }
 
 func sum(a, b int) int {
