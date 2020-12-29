@@ -209,25 +209,27 @@ func (scheduler *Scheduler) runningJobCount() int {
 func (scheduler *Scheduler) runJobs(t time.Time) {
 	runnableJobs := scheduler.getRunnableJobs(t)
 	for _, job := range runnableJobs {
-		function := func() {
-			channel := make(chan bool, 1)
-			go func() {
-				job.run(t)
-				channel <- true
-			}()
-			select {
-			case <-channel:
-				return
-			case <-time.After(jobMaxExecutionDuration):
-				jobStat := JobStat{
-					IsSuccess:     false,
-					Err:           ErrJobTimeout,
-					ScheduledTime: t,
-					RunDuration:   jobMaxExecutionDuration,
+		function := func(job Job) func() {
+			return func() {
+				channel := make(chan bool, 1)
+				go func() {
+					job.run(t)
+					channel <- true
+				}()
+				select {
+				case <-channel:
+					return
+				case <-time.After(jobMaxExecutionDuration):
+					jobStat := JobStat{
+						IsSuccess:     false,
+						Err:           ErrJobTimeout,
+						ScheduledTime: t,
+						RunDuration:   jobMaxExecutionDuration,
+					}
+					job.addStat(jobStat)
 				}
-				job.addStat(jobStat)
 			}
-		}
+		}(job)
 		if err := scheduler.workerPool.Submit(function); err != nil {
 			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
 			job.addStat(jobStat)
