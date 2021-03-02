@@ -385,6 +385,14 @@ func (job *commonJob) GetLatestScheduledTime() time.Time {
 	return job.scheduledTime
 }
 
+func (job *commonJob) alreadyScheduled() bool {
+	return !job.scheduledTime.IsZero()
+}
+
+func (job *commonJob) scheduledAt(t time.Time) {
+	job.scheduledTime = t.Truncate(time.Second)
+}
+
 func (job *commonJob) run(t time.Time) {
 	t = t.Truncate(time.Second)
 	startTime := time.Now()
@@ -421,7 +429,6 @@ func (job *commonJob) coordinate(t time.Time) bool {
 type OnceJob struct {
 	commonJob
 	delay                 time.Duration
-	scheduled             bool
 	expectedScheduledTime time.Time
 }
 
@@ -444,7 +451,7 @@ func (job *OnceJob) Delay(delay time.Duration) *OnceJob {
 
 func (job *OnceJob) isRunnable(t time.Time) bool {
 	var runnable bool
-	if !job.expectedScheduledTime.After(t) && !job.scheduled {
+	if !job.expectedScheduledTime.After(t) && !job.alreadyScheduled() {
 		runnable = true
 	}
 	if runnable && job.coordinator != nil {
@@ -467,11 +474,6 @@ func (job *OnceJob) isRunnable(t time.Time) bool {
 func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
 	job.commonJob.setCoordinate(coordinator)
 	return job
-}
-
-func (job *OnceJob) scheduledAt(t time.Time) {
-	job.scheduledTime = t.Truncate(time.Second)
-	job.scheduled = true
 }
 
 func (job *OnceJob) run(t time.Time) {
@@ -528,10 +530,6 @@ func (job *PeriodicJob) isRunnable(t time.Time) bool {
 		}
 	}
 	return runnable
-}
-
-func (job *PeriodicJob) scheduledAt(t time.Time) {
-	job.scheduledTime = t.Truncate(time.Second)
 }
 
 // SetCoordinate sets coordinator for the current job.
