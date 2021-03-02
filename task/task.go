@@ -141,24 +141,6 @@ func (scheduler *Scheduler) AddRunOnceJob(name string, function interface{}, par
 	return job
 }
 
-func (scheduler *Scheduler) getSchedulableJobs(t time.Time) []Job {
-	schedulableJobs := []Job{}
-	scheduler.jobLock.RLock()
-	defer scheduler.jobLock.RUnlock()
-	for _, job := range scheduler.jobs {
-		schedulable, err := job.IsSchedulable(t)
-		if err != nil {
-			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
-			job.addStat(jobStat)
-			continue
-		}
-		if schedulable {
-			schedulableJobs = append(schedulableJobs, job)
-		}
-	}
-	return schedulableJobs
-}
-
 // RemoveJob removes a job by name from the current scheduler.
 func (scheduler *Scheduler) RemoveJob(name string) {
 	scheduler.jobLock.Lock()
@@ -212,6 +194,17 @@ func (scheduler *Scheduler) Stop(force bool) {
 	}
 }
 
+// JobStats returns all jobs' statistics in the current scheduler.
+func (scheduler *Scheduler) JobStats() map[string][]JobStat {
+	jobStats := make(map[string][]JobStat, len(scheduler.jobs))
+	scheduler.jobLock.RLock()
+	defer scheduler.jobLock.RUnlock()
+	for name, job := range scheduler.jobs {
+		jobStats[name] = job.Stats()
+	}
+	return jobStats
+}
+
 func (scheduler *Scheduler) runningJobCount() int {
 	return scheduler.workerPool.Running()
 }
@@ -248,15 +241,22 @@ func (scheduler *Scheduler) runJobs(t time.Time) {
 	}
 }
 
-// JobStats returns all jobs' statistics in the current scheduler.
-func (scheduler *Scheduler) JobStats() map[string][]JobStat {
-	jobStats := make(map[string][]JobStat, len(scheduler.jobs))
+func (scheduler *Scheduler) getSchedulableJobs(t time.Time) []Job {
+	schedulableJobs := []Job{}
 	scheduler.jobLock.RLock()
 	defer scheduler.jobLock.RUnlock()
-	for name, job := range scheduler.jobs {
-		jobStats[name] = job.Stats()
+	for _, job := range scheduler.jobs {
+		schedulable, err := job.IsSchedulable(t)
+		if err != nil {
+			jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
+			job.addStat(jobStat)
+			continue
+		}
+		if schedulable {
+			schedulableJobs = append(schedulableJobs, job)
+		}
 	}
-	return jobStats
+	return schedulableJobs
 }
 
 func newCoordinateError(err error) error {
@@ -587,14 +587,14 @@ func (job *OnceJob) Interval() time.Duration {
 	return 0
 }
 
-func (job *OnceJob) run(t time.Time) JobStat {
-	return job.commonJob.run(t, job.Interval())
-}
-
 // SetCoordinate sets coordinator for the current job.
 func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
 	job.commonJob.setCoordinate(coordinator)
 	return job
+}
+
+func (job *OnceJob) run(t time.Time) JobStat {
+	return job.commonJob.run(t, job.Interval())
 }
 
 // PeriodicJob represents a job running periodically.
@@ -640,10 +640,6 @@ func (job *PeriodicJob) IsSchedulable(t time.Time) (bool, error) {
 		schedulable = ok
 	}
 	return schedulable, nil
-}
-
-func (job *PeriodicJob) run(t time.Time) JobStat {
-	return job.commonJob.run(t, job.Interval())
 }
 
 // SetCoordinate sets coordinator for the current job.
@@ -766,6 +762,10 @@ func (job *PeriodicJob) SetTimeZone(tz *time.Location) *PeriodicJob {
 	return job
 }
 
+func (job *PeriodicJob) run(t time.Time) JobStat {
+	return job.commonJob.run(t, job.Interval())
+}
+
 func interfaceToError(i interface{}) error {
 	var err error
 	switch v := i.(type) {
@@ -833,19 +833,6 @@ type cronExpression struct {
 	weekDay      time.Weekday
 	at           time.Duration
 	timezone     *time.Location
-}
-
-func newCron(interval int, intervalType cronIntervalType, at time.Duration, timezone *time.Location) *cronExpression {
-	// interval less or euqual to 0 will be set to 1.
-	if interval <= 0 {
-		interval = 1
-	}
-	return &cronExpression{
-		interval:     interval,
-		intervalType: intervalType,
-		at:           at,
-		timezone:     timezone,
-	}
 }
 
 func (cron *cronExpression) isValid() bool {
