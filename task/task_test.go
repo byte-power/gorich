@@ -391,32 +391,32 @@ func TestCoordinate(t *testing.T) {
 	//defer coordinator.removeCoordinatorKey(jobName)
 	layout := "2006-01-02:15:04:05"
 	t1, _ := time.Parse(layout, "2012-03-04:05:06:01")
-	stat, err := coordinator.Coordinate(jobName, t1, 0)
+	stat, err := coordinator.coordinate(jobName, t1, 0)
 	assert.Nil(t, err)
 	assert.True(t, stat.schedulable)
 	assert.True(t, t1.Truncate(time.Second).Equal(stat.scheduedAt))
 
 	t2, _ := time.Parse(layout, "2012-03-04:05:06:02")
-	stat, err = coordinator.Coordinate(jobName, t2, 0)
+	stat, err = coordinator.coordinate(jobName, t2, 0)
 	assert.False(t, stat.schedulable)
 	assert.True(t, t1.Truncate(time.Second).Equal(stat.scheduedAt))
 	assert.Nil(t, err)
 
 	jobName2 := "job2"
 	t3, _ := time.Parse(layout, "2012-03-04:05:16:01")
-	stat, err = coordinator.Coordinate(jobName2, t3, 2*time.Second)
+	stat, err = coordinator.coordinate(jobName2, t3, 2*time.Second)
 	assert.Nil(t, err)
 	assert.True(t, stat.schedulable)
 	assert.True(t, t3.Truncate(time.Second).Equal(stat.scheduedAt))
 
 	t4, _ := time.Parse(layout, "2012-03-04:05:16:02")
-	stat, err = coordinator.Coordinate(jobName2, t4, 2*time.Second)
+	stat, err = coordinator.coordinate(jobName2, t4, 2*time.Second)
 	assert.Nil(t, err)
 	assert.False(t, stat.schedulable)
 	assert.True(t, t3.Truncate(time.Second).Equal(stat.scheduedAt))
 
 	t5, _ := time.Parse(layout, "2012-03-04:05:16:03")
-	stat, err = coordinator.Coordinate(jobName2, t5, 2*time.Second)
+	stat, err = coordinator.coordinate(jobName2, t5, 2*time.Second)
 	assert.Nil(t, err)
 	assert.True(t, stat.schedulable)
 	assert.True(t, t5.Truncate(time.Second).Equal(stat.scheduedAt))

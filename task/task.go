@@ -289,7 +289,7 @@ func NewCoordinatorFromRedisCluster(name string, addrs []string) *Coordinator {
 }
 
 // Coordinate coordinates a job by name at scheduledTime.
-func (coordinator *Coordinator) Coordinate(jobName string, scheduledTime time.Time, scheduledInterval time.Duration) (scheduledStat, error) {
+func (coordinator *Coordinator) coordinate(jobName string, scheduledTime time.Time, scheduledInterval time.Duration) (scheduledStat, error) {
 	key := coordinator.getCoordinatorKey(jobName)
 	scheduledTime = scheduledTime.Truncate(time.Second)
 	scheduledTs := scheduledTime.Unix()
@@ -431,11 +431,6 @@ type JobStat struct {
 	ScheduledTime time.Time
 }
 
-type scheduledStat struct {
-	schedulable bool
-	scheduedAt  time.Time
-}
-
 // ToMap converts a JobStat struct to a map.
 func (stat JobStat) ToMap() map[string]interface{} {
 	return map[string]interface{}{
@@ -444,6 +439,11 @@ func (stat JobStat) ToMap() map[string]interface{} {
 		"run_duration":  stat.RunDuration,
 		"scheduledTime": stat.ScheduledTime,
 	}
+}
+
+type scheduledStat struct {
+	schedulable bool
+	scheduedAt  time.Time
 }
 
 // Job represents a job
@@ -540,7 +540,7 @@ func (job *commonJob) coordinate(t time.Time, interval time.Duration) (scheduled
 	if job.coordinator == nil {
 		return scheduledStat{schedulable: true, scheduedAt: scheduledTime}, nil
 	}
-	return job.coordinator.Coordinate(job.name, scheduledTime, interval)
+	return job.coordinator.coordinate(job.name, scheduledTime, interval)
 }
 
 // OnceJob represents a job running only once.
