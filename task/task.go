@@ -385,6 +385,18 @@ func (coordinator *Coordinator) isJobSchedulable(name string, scheduledTime time
 	return false, nil
 }
 
+func (coordinator *Coordinator) removeCoordinatorKeyByJobName(jobName string) error {
+	var client redis.Cmdable
+	key := coordinator.getCoordinatorKey(jobName)
+	if coordinator.redisMode == redisStandaloneMode {
+		client = coordinator.redisClient
+	} else {
+		client = coordinator.redisClusterClient
+	}
+	_, err := client.Del(contextTODO, key).Result()
+	return err
+}
+
 func (coordinator *Coordinator) getCoordinatorKey(jobName string) string {
 	return fmt.Sprintf("gorich:task:%s:%s", coordinator.name, jobName)
 }
