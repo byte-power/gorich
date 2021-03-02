@@ -27,7 +27,6 @@ import (
 
 const (
 	defaultConcurrentWorkerCount = 100
-	defaultQueueSize             = 500
 	maxStatsCount                = 100
 
 	jobMaxExecutionDuration = 1 * time.Hour
@@ -107,7 +106,7 @@ func NewScheduler(workerCount int) Scheduler {
 		panic(err)
 	}
 	return Scheduler{
-		jobs:       make(map[string]Job, 0),
+		jobs:       make(map[string]Job),
 		jobLock:    sync.RWMutex{},
 		workerPool: pool,
 		stop:       make(chan bool),
@@ -160,7 +159,7 @@ func (scheduler *Scheduler) RemoveJob(name string) {
 func (scheduler *Scheduler) RemoveAllJobs() {
 	scheduler.jobLock.Lock()
 	defer scheduler.jobLock.Unlock()
-	scheduler.jobs = make(map[string]Job, 0)
+	scheduler.jobs = make(map[string]Job)
 }
 
 // Start starts the current scheduler.
@@ -424,7 +423,6 @@ type OnceJob struct {
 	delay                 time.Duration
 	scheduled             bool
 	expectedScheduledTime time.Time
-	jobStatLock           sync.Mutex
 }
 
 // NewOnceJob creates a OnceJob.
