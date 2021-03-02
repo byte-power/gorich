@@ -50,6 +50,8 @@ var (
 
 var defaultScheduler = NewScheduler(defaultConcurrentWorkerCount)
 
+var contextTODO = context.TODO()
+
 // Scheduler represents a scheduler.
 type Scheduler struct {
 	jobs       map[string]Job
@@ -281,9 +283,9 @@ func (coordinator *Coordinator) Coordinate(name string, scheduledTime time.Time)
 	key := coordinator.getCoordinatorKey(name)
 	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
 	if coordinator.redisMode == redisStandaloneMode {
-		ok, err = coordinator.redisClient.SetNX(context.Background(), key, scheduledTs, 5*time.Second).Result()
+		ok, err = coordinator.redisClient.SetNX(contextTODO, key, scheduledTs, 5*time.Second).Result()
 	} else if coordinator.redisMode == redisClusterMode {
-		ok, err = coordinator.redisClusterClient.SetNX(context.Background(), key, scheduledTs, 5*time.Second).Result()
+		ok, err = coordinator.redisClusterClient.SetNX(contextTODO, key, scheduledTs, 5*time.Second).Result()
 	}
 	if err != nil {
 		err = newCoordinateError(err)
@@ -299,9 +301,9 @@ func (coordinator *Coordinator) checkRunnableAndGetLastScheduledTime(name string
 	key := coordinator.getCoordinatorKey(name)
 	var value string
 	if coordinator.redisMode == redisStandaloneMode {
-		value, err = coordinator.redisClient.Get(context.Background(), key).Result()
+		value, err = coordinator.redisClient.Get(contextTODO, key).Result()
 	} else if coordinator.redisMode == redisClusterMode {
-		value, err = coordinator.redisClusterClient.Get(context.Background(), key).Result()
+		value, err = coordinator.redisClusterClient.Get(contextTODO, key).Result()
 	}
 	if err == nil {
 		if ts, convErr := strconv.ParseInt(value, 10, 64); convErr != nil {
