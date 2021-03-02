@@ -389,6 +389,28 @@ func (coordinator *Coordinator) getCoordinatorKey(jobName string) string {
 	return fmt.Sprintf("gorich:task:%s:%s", coordinator.name, jobName)
 }
 
+func (coordinator *Coordinator) getScheduledTime(jobName string) (time.Time, error) {
+	var client redis.Cmdable
+	key := coordinator.getCoordinatorKey(jobName)
+	if coordinator.redisMode == redisStandaloneMode {
+		client = coordinator.redisClient
+	} else {
+		client = coordinator.redisClusterClient
+	}
+	value, err := client.Get(contextTODO, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			err = nil
+		}
+		return time.Time{}, newCoordinateError(err)
+	}
+	ts, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return time.Time{}, newCoordinateError(err)
+	}
+	return time.Unix(ts, 0), nil
+}
+
 // JobStat represents the running statistics of a job.
 type JobStat struct {
 	IsSuccess     bool
@@ -416,7 +438,7 @@ func (stat JobStat) ToMap() map[string]interface{} {
 type Job interface {
 	Name() string
 	Stats() []JobStat
-	GetLatestScheduledTime() time.Time
+	GetLatestScheduledTime() (time.Time, error)
 	IsSchedulable(time.Time) (bool, error)
 
 	scheduledAt(time.Time)
@@ -455,8 +477,19 @@ func (job *commonJob) addStat(stat JobStat) {
 
 // GetLatestScheduledTime returns job's latest scheduled time,
 // returns time.Time{} if is not scheduled yet.
-func (job *commonJob) GetLatestScheduledTime() time.Time {
-	return job.scheduledTime
+func (job *commonJob) GetLatestScheduledTime() (time.Time, error) {
+	scheduledTime := job.scheduledTime
+	if job.coordinator != nil {
+		t, err := job.coordinator.getScheduledTime(job.name)
+		if err != nil {
+			return time.Time{}, err
+		}
+		scheduledTime = t
+	}
+	if scheduledTime.After(job.scheduledTime) {
+		job.scheduledAt(scheduledTime)
+	}
+	return job.scheduledTime, nil
 }
 
 func (job *commonJob) alreadyScheduled() bool {
