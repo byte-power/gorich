@@ -217,18 +217,19 @@ func (scheduler *Scheduler) runningJobCount() int {
 }
 
 func (scheduler *Scheduler) runJobs(t time.Time) {
-	runnableJobs := scheduler.getSchedulableJobs(t)
-	for _, job := range runnableJobs {
+	t = t.Truncate(time.Second)
+	schedulableJobs := scheduler.getSchedulableJobs(t)
+	for _, job := range schedulableJobs {
 		function := func(job Job) func() {
 			return func() {
-				channel := make(chan bool, 1)
+				channel := make(chan JobStat)
 				go func() {
-					job.run(t)
-					channel <- true
+					stat := job.run(t)
+					channel <- stat
 				}()
 				select {
-				case <-channel:
-					return
+				case jobStat := <-channel:
+					job.addStat(jobStat)
 				case <-time.After(jobMaxExecutionDuration):
 					jobStat := JobStat{
 						IsSuccess:     false,
@@ -288,18 +289,69 @@ func NewCoordinatorFromRedisCluster(name string, addrs []string) *Coordinator {
 }
 
 // Coordinate coordinates a job by name at scheduledTime.
-func (coordinator *Coordinator) Coordinate(name string, scheduledTime time.Time) (ok bool, err error) {
-	key := coordinator.getCoordinatorKey(name)
-	scheduledTs := scheduledTime.Truncate(time.Second).Unix()
+func (coordinator *Coordinator) Coordinate(jobName string, scheduledTime time.Time, scheduledInterval time.Duration) (scheduledStat, error) {
+	key := coordinator.getCoordinatorKey(jobName)
+	scheduledTime = scheduledTime.Truncate(time.Second)
+	scheduledTs := scheduledTime.Unix()
+	stat := scheduledStat{}
+	coordinateFn := func(tx *redis.Tx) error {
+		_, err := tx.TxPipelined(
+			contextTODO,
+			func(pipeliner redis.Pipeliner) error {
+				value, err := tx.Get(contextTODO, key).Result()
+				var redisKeyDuration time.Duration
+				if scheduledInterval == 0 {
+					redisKeyDuration = 5 * time.Second
+				} else {
+					redisKeyDuration = scheduledInterval
+				}
+				if err != nil {
+					if err == redis.Nil {
+						if _, err := pipeliner.Set(contextTODO, key, scheduledTs, redisKeyDuration).Result(); err != nil {
+							return err
+						}
+						stat.scheduedAt = scheduledTime
+						stat.schedulable = true
+						return nil
+					}
+					return err
+				}
+
+				ts, err := strconv.ParseInt(value, 10, 64)
+				if err != nil {
+					return err
+				}
+
+				if scheduledInterval == 0 {
+					stat.schedulable = false
+					stat.scheduedAt = time.Unix(ts, 0)
+					return nil
+				}
+
+				if ts+int64(scheduledInterval/time.Second) <= scheduledTs {
+					if _, err := pipeliner.Set(contextTODO, key, scheduledTs, redisKeyDuration).Result(); err != nil {
+						return err
+					}
+					stat.scheduedAt = scheduledTime
+					stat.schedulable = true
+				} else {
+					stat.scheduedAt = time.Unix(ts, 0)
+					stat.schedulable = false
+				}
+				return nil
+			})
+		return err
+	}
+	var err error
 	if coordinator.redisMode == redisStandaloneMode {
-		ok, err = coordinator.redisClient.SetNX(contextTODO, key, scheduledTs, 5*time.Second).Result()
+		err = coordinator.redisClient.Watch(contextTODO, coordinateFn, key)
 	} else if coordinator.redisMode == redisClusterMode {
-		ok, err = coordinator.redisClusterClient.SetNX(contextTODO, key, scheduledTs, 5*time.Second).Result()
+		err = coordinator.redisClusterClient.Watch(contextTODO, coordinateFn, key)
 	}
 	if err != nil {
 		err = newCoordinateError(err)
 	}
-	return
+	return stat, err
 }
 
 func (coordinator *Coordinator) isJobSchedulable(name string, scheduledTime time.Time, scheduledInterval time.Duration) (bool, error) {
@@ -345,6 +397,11 @@ type JobStat struct {
 	ScheduledTime time.Time
 }
 
+type scheduledStat struct {
+	schedulable bool
+	scheduedAt  time.Time
+}
+
 // ToMap converts a JobStat struct to a map.
 func (stat JobStat) ToMap() map[string]interface{} {
 	return map[string]interface{}{
@@ -363,7 +420,7 @@ type Job interface {
 	IsSchedulable(time.Time) (bool, error)
 
 	scheduledAt(time.Time)
-	run(time.Time)
+	run(time.Time) JobStat
 	addStat(stat JobStat)
 }
 
@@ -410,36 +467,35 @@ func (job *commonJob) scheduledAt(t time.Time) {
 	job.scheduledTime = t.Truncate(time.Second)
 }
 
-func (job *commonJob) run(t time.Time) {
+func (job *commonJob) run(t time.Time, jobInterval time.Duration) JobStat {
+	scheduledStat, err := job.coordinate(t, jobInterval)
+	if err != nil {
+		return JobStat{IsSuccess: false, Err: err, ScheduledTime: t}
+	}
+	if !scheduledStat.schedulable {
+		job.scheduledAt(scheduledStat.scheduedAt)
+		return JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: t}
+	}
+
 	t = t.Truncate(time.Second)
 	startTime := time.Now()
 	stat := runJobFunctionAndGetJobStat(job.function, job.params)
-	stat.RunDuration = time.Now().Sub(startTime)
+	stat.RunDuration = time.Since(startTime)
 	stat.ScheduledTime = t
-	job.addStat(stat)
+	job.scheduledAt(t)
+	return stat
 }
 
 func (job *commonJob) setCoordinate(coordinator *Coordinator) {
 	job.coordinator = coordinator
 }
 
-func (job *commonJob) coordinate(t time.Time) bool {
-	if job.coordinator == nil {
-		return true
-	}
+func (job *commonJob) coordinate(t time.Time, interval time.Duration) (scheduledStat, error) {
 	scheduledTime := t.Truncate(time.Second)
-	canBeScheduled, err := job.coordinator.Coordinate(job.name, scheduledTime)
-	if err != nil {
-		jobStat := JobStat{IsSuccess: false, Err: err, ScheduledTime: scheduledTime}
-		job.addStat(jobStat)
-		return false
+	if job.coordinator == nil {
+		return scheduledStat{schedulable: true, scheduedAt: scheduledTime}, nil
 	}
-	if !canBeScheduled {
-		jobStat := JobStat{IsSuccess: false, Err: ErrRaceCondition, ScheduledTime: scheduledTime}
-		job.addStat(jobStat)
-		return false
-	}
-	return true
+	return job.coordinator.Coordinate(job.name, scheduledTime, interval)
 }
 
 // OnceJob represents a job running only once.
@@ -482,18 +538,18 @@ func (job *OnceJob) IsSchedulable(t time.Time) (bool, error) {
 	return schedulable, nil
 }
 
+func (job *OnceJob) Interval() time.Duration {
+	return 0
+}
+
+func (job *OnceJob) run(t time.Time) JobStat {
+	return job.commonJob.run(t, job.Interval())
+}
+
 // SetCoordinate sets coordinator for the current job.
 func (job *OnceJob) SetCoordinate(coordinator *Coordinator) *OnceJob {
 	job.commonJob.setCoordinate(coordinator)
 	return job
-}
-
-func (job *OnceJob) run(t time.Time) {
-	log.Printf("run job: %s\n", job.name)
-	if job.coordinate(t) {
-		job.scheduledAt(t)
-		job.commonJob.run(t)
-	}
 }
 
 // PeriodicJob represents a job running periodically.
@@ -508,6 +564,10 @@ func NewPeriodicJob(name string, function interface{}, params []interface{}) *Pe
 		commonJob: commonJob{name: name, function: function, params: params},
 		cron:      &cronExpression{timezone: time.Local},
 	}
+}
+
+func (job *PeriodicJob) Interval() time.Duration {
+	return job.cron.intervalDuration()
 }
 
 func (job *PeriodicJob) IsSchedulable(t time.Time) (bool, error) {
@@ -535,6 +595,10 @@ func (job *PeriodicJob) IsSchedulable(t time.Time) (bool, error) {
 		schedulable = ok
 	}
 	return schedulable, nil
+}
+
+func (job *PeriodicJob) run(t time.Time) JobStat {
+	return job.commonJob.run(t, job.Interval())
 }
 
 // SetCoordinate sets coordinator for the current job.
@@ -655,14 +719,6 @@ func (job *PeriodicJob) AtSecondInMinute(second int) (*PeriodicJob, error) {
 func (job *PeriodicJob) SetTimeZone(tz *time.Location) *PeriodicJob {
 	job.cron.setTimeZone(tz)
 	return job
-}
-
-func (job *PeriodicJob) run(t time.Time) {
-	log.Printf("run job: %s\n", job.name)
-	if job.coordinate(t) {
-		job.scheduledAt(t)
-		job.commonJob.run(t)
-	}
 }
 
 func interfaceToError(i interface{}) error {
