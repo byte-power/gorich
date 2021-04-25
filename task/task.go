@@ -259,8 +259,28 @@ func (scheduler *Scheduler) getSchedulableJobs(t time.Time) []Job {
 	return schedulableJobs
 }
 
+type coordinateError struct {
+	err error
+}
+
+func (err *coordinateError) Error() string {
+	if err.err == nil {
+		return "coordinate error"
+	}
+	return fmt.Sprintf("coordinate error:%s", err.err.Error())
+}
+
+func (err *coordinateError) Unwrap() error {
+	return err.err
+}
+
 func newCoordinateError(err error) error {
-	return fmt.Errorf("coordinate error:%w", err)
+	return &coordinateError{err: err}
+}
+
+func IsCoordinateError(err error) bool {
+	var e *coordinateError
+	return errors.As(err, &e)
 }
 
 const (
