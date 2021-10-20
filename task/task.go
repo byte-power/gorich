@@ -495,6 +495,8 @@ func (job *commonJob) Name() string {
 
 // Stats returns a job's running statistics.
 func (job *commonJob) Stats() []JobStat {
+	job.jobStatLock.Lock()
+	defer job.jobStatLock.Unlock()
 	return job.jobStats
 }
 
