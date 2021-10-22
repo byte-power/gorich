@@ -13,3 +13,7 @@ type Options struct {
 	SecretKey string
 	Region    string
 }
+
+func (options Options) Check() error {
+	return nil
+}
