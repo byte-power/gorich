@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"time"
@@ -15,12 +16,12 @@ var (
 )
 
 type Bucket interface {
-	ListObjects(prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error)
-	GetObject(key string) (*Object, error)
-	PutObject(key string, body []byte) error
-	DeleteObject(key string) error
-	DeleteObjects(keys ...string) error
-	GetSignedURL(key string, duration time.Duration) (string, error)
+	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error)
+	GetObject(ctx context.Context, key string) (*Object, error)
+	PutObject(ctx context.Context, key string, body []byte) error
+	DeleteObject(ctx context.Context, key string) error
+	DeleteObjects(ctx context.Context, keys ...string) error
+	GetSignedURL(ctx context.Context, key string, duration time.Duration) (string, error)
 }
 
 type Object struct {
