@@ -20,6 +20,7 @@ type Bucket interface {
 	PutObject(key string, body []byte) error
 	DeleteObject(key string) error
 	DeleteObjects(keys ...string) error
+	GetSignedURL(key string, duration time.Duration) (string, error)
 }
 
 type Object struct {

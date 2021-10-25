@@ -152,3 +152,16 @@ func (bucket *TencentCloudBucket) DeleteObjects(keys ...string) error {
 	_, _, err := bucket.client.Object.DeleteMulti(context.TODO(), opts)
 	return err
 }
+
+func (bucket *TencentCloudBucket) GetSignedURL(key string, duration time.Duration) (string, error) {
+	url, err := bucket.client.Object.GetPresignedURL(
+		context.TODO(), http.MethodGet, key,
+		bucket.client.GetCredential().SecretID,
+		bucket.client.GetCredential().SecretKey,
+		duration, nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
+}
