@@ -1,4 +1,4 @@
-package blob
+package object_storage
 
 import (
 	"context"
@@ -15,7 +15,7 @@ var (
 	ErrProviderNotSupported = errors.New("provider is not supported, only support aws and tencent cloud")
 )
 
-type Bucket interface {
+type ObjectStorageService interface {
 	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error)
 	GetObject(ctx context.Context, key string) (*Object, error)
 	PutObject(ctx context.Context, key string, body []byte) error
@@ -48,15 +48,15 @@ func (object Object) GetModifiedTime() time.Time {
 	return object.lastModified
 }
 
-func GetBucket(name string, options cloud.Options) (Bucket, error) {
-	if name == "" {
+func GetObjectStorageService(bucketName string, options cloud.Options) (ObjectStorageService, error) {
+	if bucketName == "" {
 		return nil, errors.New("bucket name should not be empty")
 	}
 	if err := options.Check(); err != nil {
 		return nil, err
 	}
 	if options.Provider == cloud.TencentCloudProvider {
-		bucketURL, err := getTencentCloudBucketURL(name, options.Region)
+		bucketURL, err := getTencentCloudBucketURL(bucketName, options.Region)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +70,7 @@ func GetBucket(name string, options cloud.Options) (Bucket, error) {
 				SecretID:  options.SecretID,
 				SecretKey: options.SecretKey,
 			}})
-		return &TencentCloudBucket{client: client}, nil
+		return &TencentCloudObjectStorageService{client: client}, nil
 	}
 	return nil, nil
 }

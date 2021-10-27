@@ -1,4 +1,4 @@
-package blob
+package object_storage
 
 import (
 	"bytes"
@@ -29,11 +29,11 @@ func getTencentCloudServiceURL(region string) (*url.URL, error) {
 	return url.Parse(u)
 }
 
-type TencentCloudBucket struct {
+type TencentCloudObjectStorageService struct {
 	client *cos.Client
 }
 
-func (bucket *TencentCloudBucket) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error) {
+func (service *TencentCloudObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error) {
 	var marker string
 	if continueToken == nil {
 		marker = ""
@@ -45,7 +45,7 @@ func (bucket *TencentCloudBucket) ListObjects(ctx context.Context, prefix string
 		MaxKeys: maxObjects,
 		Marker:  marker,
 	}
-	resp, _, err := bucket.client.Bucket.Get(ctx, opts)
+	resp, _, err := service.client.Bucket.Get(ctx, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -70,11 +70,11 @@ func (bucket *TencentCloudBucket) ListObjects(ctx context.Context, prefix string
 	return objects, nextToken, nil
 }
 
-func (bucket *TencentCloudBucket) GetObject(ctx context.Context, key string) (*Object, error) {
+func (service *TencentCloudObjectStorageService) GetObject(ctx context.Context, key string) (*Object, error) {
 	if key == "" {
 		return nil, ErrObjectKeyEmpty
 	}
-	resp, err := bucket.client.Object.Get(ctx, key, nil)
+	resp, err := service.client.Object.Get(ctx, key, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -124,23 +124,23 @@ func parseEtagFromHeader(headers http.Header) (string, error) {
 	return header[0], nil
 }
 
-func (bucket *TencentCloudBucket) PutObject(ctx context.Context, key string, body []byte) error {
+func (service *TencentCloudObjectStorageService) PutObject(ctx context.Context, key string, body []byte) error {
 	if key == "" {
 		return ErrObjectKeyEmpty
 	}
-	_, err := bucket.client.Object.Put(ctx, key, bytes.NewReader(body), nil)
+	_, err := service.client.Object.Put(ctx, key, bytes.NewReader(body), nil)
 	return err
 }
 
-func (bucket *TencentCloudBucket) DeleteObject(ctx context.Context, key string) error {
+func (service *TencentCloudObjectStorageService) DeleteObject(ctx context.Context, key string) error {
 	if key == "" {
 		return ErrObjectKeyEmpty
 	}
-	_, err := bucket.client.Object.Delete(ctx, key)
+	_, err := service.client.Object.Delete(ctx, key)
 	return err
 }
 
-func (bucket *TencentCloudBucket) DeleteObjects(ctx context.Context, keys ...string) error {
+func (service *TencentCloudObjectStorageService) DeleteObjects(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return errors.New("parameter keys should not be empty")
 	}
@@ -149,15 +149,15 @@ func (bucket *TencentCloudBucket) DeleteObjects(ctx context.Context, keys ...str
 		objects = append(objects, cos.Object{Key: key})
 	}
 	opts := &cos.ObjectDeleteMultiOptions{Objects: objects}
-	_, _, err := bucket.client.Object.DeleteMulti(ctx, opts)
+	_, _, err := service.client.Object.DeleteMulti(ctx, opts)
 	return err
 }
 
-func (bucket *TencentCloudBucket) GetSignedURL(ctx context.Context, key string, duration time.Duration) (string, error) {
-	url, err := bucket.client.Object.GetPresignedURL(
+func (service *TencentCloudObjectStorageService) GetSignedURL(ctx context.Context, key string, duration time.Duration) (string, error) {
+	url, err := service.client.Object.GetPresignedURL(
 		ctx, http.MethodGet, key,
-		bucket.client.GetCredential().SecretID,
-		bucket.client.GetCredential().SecretKey,
+		service.client.GetCredential().SecretID,
+		service.client.GetCredential().SecretKey,
 		duration, nil,
 	)
 	if err != nil {
