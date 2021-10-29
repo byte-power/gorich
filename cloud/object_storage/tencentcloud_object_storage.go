@@ -153,9 +153,12 @@ func (service *TencentCloudObjectStorageService) DeleteObjects(ctx context.Conte
 	return err
 }
 
-func (service *TencentCloudObjectStorageService) GetSignedURL(ctx context.Context, key string, duration time.Duration) (string, error) {
+func (service *TencentCloudObjectStorageService) GetSignedURL(key string, duration time.Duration) (string, error) {
+	if key == "" {
+		return "", ErrObjectKeyEmpty
+	}
 	url, err := service.client.Object.GetPresignedURL(
-		ctx, http.MethodGet, key,
+		context.Background(), http.MethodGet, key,
 		service.client.GetCredential().SecretID,
 		service.client.GetCredential().SecretKey,
 		duration, nil,

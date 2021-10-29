@@ -6,6 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/byte-power/gorich/cloud"
 	"github.com/tencentyun/cos-go-sdk-v5"
 )
@@ -21,7 +25,7 @@ type ObjectStorageService interface {
 	PutObject(ctx context.Context, key string, body []byte) error
 	DeleteObject(ctx context.Context, key string) error
 	DeleteObjects(ctx context.Context, keys ...string) error
-	GetSignedURL(ctx context.Context, key string, duration time.Duration) (string, error)
+	GetSignedURL(key string, duration time.Duration) (string, error)
 }
 
 type Object struct {
@@ -71,6 +75,16 @@ func GetObjectStorageService(bucketName string, options cloud.Options) (ObjectSt
 				SecretKey: options.SecretKey,
 			}})
 		return &TencentCloudObjectStorageService{client: client}, nil
+	} else if options.Provider == cloud.AWSProvider {
+		session, err := session.NewSession(&aws.Config{
+			Region:      aws.String(options.Region),
+			Credentials: credentials.NewStaticCredentials(options.SecretID, options.SecretKey, ""),
+		})
+		if err != nil {
+			return nil, err
+		}
+		client := s3.New(session)
+		return &AWSObjectStorageService{client: client, bucketName: bucketName}, nil
 	}
 	return nil, nil
 }
