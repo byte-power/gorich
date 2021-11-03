@@ -52,33 +52,33 @@ func (object Object) GetModifiedTime() time.Time {
 	return object.lastModified
 }
 
-func GetObjectStorageService(bucketName string, options cloud.Option) (ObjectStorageService, error) {
+func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
 	if bucketName == "" {
 		return nil, errors.New("bucket name should not be empty")
 	}
-	if err := options.Check(); err != nil {
+	if err := option.Check(); err != nil {
 		return nil, err
 	}
-	if options.GetProvider() == cloud.TencentCloudProvider {
-		bucketURL, err := getTencentCloudBucketURL(bucketName, options.GetRegion())
+	if option.GetProvider() == cloud.TencentCloudProvider {
+		bucketURL, err := getTencentCloudBucketURL(bucketName, option.GetRegion())
 		if err != nil {
 			return nil, err
 		}
-		serviceURL, err := getTencentCloudServiceURL(options.GetRegion())
+		serviceURL, err := getTencentCloudServiceURL(option.GetRegion())
 		if err != nil {
 			return nil, err
 		}
 		baseURL := &cos.BaseURL{BucketURL: bucketURL, ServiceURL: serviceURL}
 		client := cos.NewClient(baseURL, &http.Client{
 			Transport: &cos.AuthorizationTransport{
-				SecretID:  options.GetSecretID(),
-				SecretKey: options.GetSecretKey(),
+				SecretID:  option.GetSecretID(),
+				SecretKey: option.GetSecretKey(),
 			}})
 		return &TencentCloudObjectStorageService{client: client}, nil
-	} else if options.GetProvider() == cloud.AWSProvider {
+	} else if option.GetProvider() == cloud.AWSProvider {
 		session, err := session.NewSession(&aws.Config{
-			Region:      aws.String(options.GetRegion()),
-			Credentials: credentials.NewStaticCredentials(options.GetSecretID(), options.GetSecretKey(), ""),
+			Region:      aws.String(option.GetRegion()),
+			Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
 		})
 		if err != nil {
 			return nil, err

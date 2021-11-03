@@ -34,17 +34,17 @@ type Message interface {
 	Body() string
 }
 
-func GetQueueService(queueOrTopicName string, options cloud.Option) (QueueService, error) {
+func GetQueueService(queueOrTopicName string, option cloud.Option) (QueueService, error) {
 	if queueOrTopicName == "" {
 		return nil, errors.New("queue or topic name should not be empty")
 	}
-	if err := options.Check(); err != nil {
+	if err := option.Check(); err != nil {
 		return nil, err
 	}
-	if options.GetProvider() == cloud.TencentCloudProvider {
-		queueOption, ok := options.(TencentQueueOption)
+	if option.GetProvider() == cloud.TencentCloudProvider {
+		queueOption, ok := option.(TencentQueueOption)
 		if !ok {
-			return nil, fmt.Errorf("parameter option %+v should be TencentQueueOption", options)
+			return nil, fmt.Errorf("parameter option %+v should be TencentQueueOption", option)
 		}
 		client, err := pulsar.NewClient(pulsar.ClientOptions{
 			URL:            queueOption.URL,
@@ -54,10 +54,10 @@ func GetQueueService(queueOrTopicName string, options cloud.Option) (QueueServic
 			return nil, err
 		}
 		return &TencentQueueService{client: client, topic: queueOrTopicName}, nil
-	} else if options.GetProvider() == cloud.AWSProvider {
+	} else if option.GetProvider() == cloud.AWSProvider {
 		session, err := session.NewSession(&aws.Config{
-			Region:      aws.String(options.GetRegion()),
-			Credentials: credentials.NewStaticCredentials(options.GetSecretID(), options.GetSecretKey(), ""),
+			Region:      aws.String(option.GetRegion()),
+			Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
 		})
 		if err != nil {
 			return nil, err

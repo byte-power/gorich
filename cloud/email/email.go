@@ -30,12 +30,12 @@ const (
 	EmailStyleText EmailStyle = "text"
 )
 
-func NewEmailService(options cloud.Option) (EmailService, error) {
-	if err := options.Check(); err != nil {
+func NewEmailService(option cloud.Option) (EmailService, error) {
+	if err := option.Check(); err != nil {
 		return nil, err
 	}
-	if options.GetProvider() == cloud.TencentCloudProvider {
-		credential := common.NewCredential(options.GetSecretID(), options.GetSecretKey())
+	if option.GetProvider() == cloud.TencentCloudProvider {
+		credential := common.NewCredential(option.GetSecretID(), option.GetSecretKey())
 		cpf := profile.NewClientProfile()
 		client, err := tencentCloudSes.NewClient(credential, tencentCloudSESSupportedRegion, cpf)
 		if err != nil {
