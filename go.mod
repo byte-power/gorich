@@ -3,6 +3,7 @@ module github.com/byte-power/gorich
 go 1.14
 
 require (
+	github.com/apache/pulsar-client-go v0.6.0
 	github.com/aws/aws-sdk-go v1.41.13
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/go-redis/redis/v8 v8.4.0
