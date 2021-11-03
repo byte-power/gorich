@@ -5,25 +5,43 @@ import (
 	"errors"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+	"github.com/byte-power/gorich/cloud"
+)
+
+var (
+	ErrTencentQueueServiceTokenEmpty = errors.New("token for tencent queue service is empty")
+	ErrTencentQueueServiceURLEmpty   = errors.New("url for tencent queue service is empty")
 )
 
 type TencentQueueOption struct {
-	secretToken string
-	url         string
+	Token string
+	URL   string
 }
 
-func NewTencentQueueOptions(token, url string) (*TencentQueueOption, error) {
-	if token == "" {
-		return nil, errors.New("token is empty")
+func (option TencentQueueOption) GetProvider() cloud.Provider {
+	return cloud.TencentCloudProvider
+}
+
+func (option TencentQueueOption) GetSecretID() string {
+	return option.Token
+}
+
+func (option TencentQueueOption) GetSecretKey() string {
+	return option.Token
+}
+
+func (option TencentQueueOption) GetRegion() string {
+	return ""
+}
+
+func (option TencentQueueOption) Check() error {
+	if option.Token == "" {
+		return ErrTencentQueueServiceTokenEmpty
 	}
-	if url == "" {
-		return nil, errors.New("url is empty")
+	if option.URL == "" {
+		return ErrTencentQueueServiceURLEmpty
 	}
-	option := &TencentQueueOption{
-		secretToken: token,
-		url:         url,
-	}
-	return option, nil
+	return nil
 }
 
 type TencentQueueMessage struct {
