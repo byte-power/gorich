@@ -9,14 +9,16 @@ import (
 	"github.com/byte-power/gorich/cloud/queue"
 )
 
+// Configure token, url, topic_name and subscription_name to run tencent cloud example.
+// Configure secret_id, secret_key, region, and queue_name to run this example.
 func main() {
 	optionForTencentCloud := queue.TencentQueueOption{
 		Token: "access_jwt_token_xxx",
 		URL:   "http://pulsar-xxxxxxxxx.tdmq.ap-gz.public.tencenttdmq.com:8080",
 	}
-	topic := "pulsar-xxxxxx/namespace_name/topic_name"
-	sub := "subscription_name"
-	topicSub := queue.GenerateTopicAndSubName(topic, sub)
+	topicName := "pulsar-xxxxxx/namespace_name/topic_name"
+	subscriptionName := "subscription_name"
+	topicSub := queue.GenerateTopicAndSubName(topicName, subscriptionName)
 	queue_examples(topicSub, optionForTencentCloud)
 
 	optionForAWS := cloud.CommonOption{
