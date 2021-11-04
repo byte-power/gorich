@@ -3,6 +3,8 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/byte-power/gorich/cloud"
@@ -11,7 +13,8 @@ import (
 var (
 	ErrTencentQueueServiceTokenEmpty            = errors.New("token for tencent queue service is empty")
 	ErrTencentQueueServiceURLEmpty              = errors.New("url for tencent queue service is empty")
-	ErrTencentQueueServiceEmptySubscriptionName = errors.New("subscription name for tencent queue consumer is empty")
+	ErrTencentQueueServiceEmptySubscriptionName = errors.New("subscription name for tencent queue service is empty")
+	ErrTencentQueueServiceEmptyTopic            = errors.New("topic name for tencent queue service is empty")
 )
 
 type TencentQueueOption struct {
@@ -56,6 +59,7 @@ func (message *TencentQueueMessage) Body() string {
 type TencentQueueService struct {
 	client pulsar.Client
 	topic  string
+	sub    string
 }
 
 func (service *TencentQueueService) CreateProducer() (Producer, error) {
@@ -66,14 +70,11 @@ func (service *TencentQueueService) CreateProducer() (Producer, error) {
 	return &TencentQueueProducer{producer: producer}, nil
 }
 
-func (service *TencentQueueService) CreateConsumer(subscriptionName string) (Consumer, error) {
-	if subscriptionName == "" {
-		return nil, ErrTencentQueueServiceEmptySubscriptionName
-	}
+func (service *TencentQueueService) CreateConsumer() (Consumer, error) {
 	consumer, err := service.client.Subscribe(pulsar.ConsumerOptions{
 		Topic:            service.topic,
 		Type:             pulsar.Shared,
-		SubscriptionName: subscriptionName,
+		SubscriptionName: service.sub,
 	})
 	if err != nil {
 		return nil, err
@@ -125,4 +126,16 @@ func (consumer *TencentQueueConsumer) AckMessage(ctx context.Context, message Me
 func (consumer *TencentQueueConsumer) Close() error {
 	consumer.consumer.Close()
 	return nil
+}
+
+func GenerateTopicAndSubName(topic, subscription string) string {
+	return fmt.Sprintf("%s %s", topic, subscription)
+}
+
+func getTopicAndSubName(topicAndSub string) (string, string, error) {
+	parts := strings.Split(topicAndSub, " ")
+	if len(parts) != 2 {
+		return "", "", errors.New("parameter is invalid format")
+	}
+	return parts[0], parts[1], nil
 }

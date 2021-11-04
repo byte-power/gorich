@@ -25,7 +25,7 @@ func (service *AWSQueueService) CreateProducer() (Producer, error) {
 	return service, nil
 }
 
-func (service *AWSQueueService) CreateConsumer(subscriptionName string) (Consumer, error) {
+func (service *AWSQueueService) CreateConsumer() (Consumer, error) {
 	return service, nil
 }
 

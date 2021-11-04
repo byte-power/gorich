@@ -15,7 +15,7 @@ import (
 
 type QueueService interface {
 	CreateProducer() (Producer, error)
-	CreateConsumer(subscriptionName string) (Consumer, error)
+	CreateConsumer() (Consumer, error)
 	Close() error
 }
 
@@ -34,14 +34,24 @@ type Message interface {
 	Body() string
 }
 
-func GetQueueService(queueOrTopicName string, option cloud.Option) (QueueService, error) {
-	if queueOrTopicName == "" {
-		return nil, errors.New("queue or topic name should not be empty")
+func GetQueueService(queueOrTopicSubName string, option cloud.Option) (QueueService, error) {
+	if queueOrTopicSubName == "" {
+		return nil, errors.New("queue or topic_sub name should not be empty")
 	}
 	if err := option.Check(); err != nil {
 		return nil, err
 	}
 	if option.GetProvider() == cloud.TencentCloudProvider {
+		topic, sub, err := getTopicAndSubName(queueOrTopicSubName)
+		if err != nil {
+			return nil, fmt.Errorf("parameter queueOrTopicSubName invalid format %w", err)
+		}
+		if topic == "" {
+			return nil, ErrTencentQueueServiceEmptyTopic
+		}
+		if sub == "" {
+			return nil, ErrTencentQueueServiceEmptySubscriptionName
+		}
 		queueOption, ok := option.(TencentQueueOption)
 		if !ok {
 			return nil, fmt.Errorf("parameter option %+v should be TencentQueueOption", option)
@@ -53,7 +63,7 @@ func GetQueueService(queueOrTopicName string, option cloud.Option) (QueueService
 		if err != nil {
 			return nil, err
 		}
-		return &TencentQueueService{client: client, topic: queueOrTopicName}, nil
+		return &TencentQueueService{client: client, topic: topic, sub: sub}, nil
 	} else if option.GetProvider() == cloud.AWSProvider {
 		session, err := session.NewSession(&aws.Config{
 			Region:      aws.String(option.GetRegion()),
@@ -63,7 +73,7 @@ func GetQueueService(queueOrTopicName string, option cloud.Option) (QueueService
 			return nil, err
 		}
 		client := sqs.New(session)
-		input := &sqs.GetQueueUrlInput{QueueName: aws.String(queueOrTopicName)}
+		input := &sqs.GetQueueUrlInput{QueueName: aws.String(queueOrTopicSubName)}
 		output, err := client.GetQueueUrl(input)
 		if err != nil {
 			return nil, err
