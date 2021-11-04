@@ -55,7 +55,7 @@ func (option CommonOption) GetRegion() string {
 }
 
 func (option CommonOption) check() error {
-	if option.SecretID != "" {
+	if option.SecretID == "" {
 		return ErrEmptySecretID
 	}
 	if option.SecretKey == "" {
