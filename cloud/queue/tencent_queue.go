@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	ErrTencentQueueServiceTokenEmpty = errors.New("token for tencent queue service is empty")
-	ErrTencentQueueServiceURLEmpty   = errors.New("url for tencent queue service is empty")
+	ErrTencentQueueServiceTokenEmpty            = errors.New("token for tencent queue service is empty")
+	ErrTencentQueueServiceURLEmpty              = errors.New("url for tencent queue service is empty")
+	ErrTencentQueueServiceEmptySubscriptionName = errors.New("subscription name for tencent queue consumer is empty")
 )
 
 type TencentQueueOption struct {
@@ -65,10 +66,14 @@ func (service *TencentQueueService) CreateProducer() (Producer, error) {
 	return &TencentQueueProducer{producer: producer}, nil
 }
 
-func (service *TencentQueueService) CreateConsumer() (Consumer, error) {
+func (service *TencentQueueService) CreateConsumer(subscriptionName string) (Consumer, error) {
+	if subscriptionName == "" {
+		return nil, ErrTencentQueueServiceEmptySubscriptionName
+	}
 	consumer, err := service.client.Subscribe(pulsar.ConsumerOptions{
-		Topic: service.topic,
-		Type:  pulsar.Shared,
+		Topic:            service.topic,
+		Type:             pulsar.Shared,
+		SubscriptionName: subscriptionName,
 	})
 	if err != nil {
 		return nil, err

@@ -15,7 +15,7 @@ import (
 
 type QueueService interface {
 	CreateProducer() (Producer, error)
-	CreateConsumer() (Consumer, error)
+	CreateConsumer(subscriptionName string) (Consumer, error)
 	Close() error
 }
 
