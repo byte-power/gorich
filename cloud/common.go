@@ -14,6 +14,8 @@ const (
 
 var (
 	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s and %s", AWSProvider, TencentCloudProvider)
+	ErrProviderNotTencentCloud  = errors.New("provider is not tencent cloud")
+	ErrProviderNotAWS           = errors.New("provider is not aws")
 	ErrEmptySecretID            = errors.New("secret_id is empty")
 	ErrEmptySecretKey           = errors.New("secret_key is empty")
 	ErrEmptyRegion              = errors.New("region is empty")
@@ -24,7 +26,9 @@ type Option interface {
 	GetSecretID() string
 	GetSecretKey() string
 	GetRegion() string
-	Check() error
+
+	CheckAWS() error
+	CheckTencentCloud() error
 }
 
 type CommonOption struct {
@@ -50,10 +54,7 @@ func (option CommonOption) GetRegion() string {
 	return option.Region
 }
 
-func (option CommonOption) Check() error {
-	if option.Provider != AWSProvider && option.Provider != TencentCloudProvider {
-		return ErrUnsupportedCloudProvider
-	}
+func (option CommonOption) check() error {
 	if option.SecretID != "" {
 		return ErrEmptySecretID
 	}
@@ -64,4 +65,18 @@ func (option CommonOption) Check() error {
 		return ErrEmptyRegion
 	}
 	return nil
+}
+
+func (option CommonOption) CheckAWS() error {
+	if option.Provider != AWSProvider {
+		return ErrProviderNotAWS
+	}
+	return option.check()
+}
+
+func (option CommonOption) CheckTencentCloud() error {
+	if option.Provider != TencentCloudProvider {
+		return ErrProviderNotTencentCloud
+	}
+	return option.check()
 }

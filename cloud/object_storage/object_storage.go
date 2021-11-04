@@ -3,20 +3,14 @@ package object_storage
 import (
 	"context"
 	"errors"
-	"net/http"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/byte-power/gorich/cloud"
-	"github.com/tencentyun/cos-go-sdk-v5"
 )
 
 var (
-	ErrObjectKeyEmpty       = errors.New("object key should not be empty")
-	ErrProviderNotSupported = errors.New("provider is not supported, only support aws and tencent cloud")
+	ErrObjectKeyEmpty  = errors.New("object key is empty")
+	ErrBucketNameEmpty = errors.New("bucket name is empty")
 )
 
 type ObjectStorageService interface {
@@ -53,38 +47,10 @@ func (object Object) GetModifiedTime() time.Time {
 }
 
 func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
-	if bucketName == "" {
-		return nil, errors.New("bucket name should not be empty")
-	}
-	if err := option.Check(); err != nil {
-		return nil, err
-	}
 	if option.GetProvider() == cloud.TencentCloudProvider {
-		bucketURL, err := getTencentCloudBucketURL(bucketName, option.GetRegion())
-		if err != nil {
-			return nil, err
-		}
-		serviceURL, err := getTencentCloudServiceURL(option.GetRegion())
-		if err != nil {
-			return nil, err
-		}
-		baseURL := &cos.BaseURL{BucketURL: bucketURL, ServiceURL: serviceURL}
-		client := cos.NewClient(baseURL, &http.Client{
-			Transport: &cos.AuthorizationTransport{
-				SecretID:  option.GetSecretID(),
-				SecretKey: option.GetSecretKey(),
-			}})
-		return &TencentCloudObjectStorageService{client: client}, nil
+		return GetTencentCloudObjectService(bucketName, option)
 	} else if option.GetProvider() == cloud.AWSProvider {
-		session, err := session.NewSession(&aws.Config{
-			Region:      aws.String(option.GetRegion()),
-			Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
-		})
-		if err != nil {
-			return nil, err
-		}
-		client := s3.New(session)
-		return &AWSObjectStorageService{client: client, bucketName: bucketName}, nil
+		return GetAWSObjectService(bucketName, option)
 	}
-	return nil, nil
+	return nil, cloud.ErrUnsupportedCloudProvider
 }

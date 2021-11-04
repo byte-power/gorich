@@ -5,7 +5,10 @@ import (
 	"errors"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/byte-power/gorich/cloud"
 )
 
 type AWSQueueMessage struct {
@@ -19,6 +22,31 @@ func (message *AWSQueueMessage) Body() string {
 type AWSQueueService struct {
 	client   *sqs.SQS
 	queueURL string
+}
+
+var ErrAWSQueueNameEmpty = errors.New("aws queue name is empty")
+
+func GetAWSQueueService(queueName string, option cloud.Option) (QueueService, error) {
+	if queueName == "" {
+		return nil, ErrAWSQueueNameEmpty
+	}
+	if err := option.CheckAWS(); err != nil {
+		return nil, err
+	}
+	session, err := session.NewSession(&aws.Config{
+		Region:      aws.String(option.GetRegion()),
+		Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
+	})
+	if err != nil {
+		return nil, err
+	}
+	client := sqs.New(session)
+	input := &sqs.GetQueueUrlInput{QueueName: aws.String(queueName)}
+	output, err := client.GetQueueUrl(input)
+	if err != nil {
+		return nil, err
+	}
+	return &AWSQueueService{client: client, queueURL: aws.StringValue(output.QueueUrl)}, nil
 }
 
 func (service *AWSQueueService) CreateProducer() (Producer, error) {

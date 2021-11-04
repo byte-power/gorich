@@ -5,12 +5,28 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/byte-power/gorich/cloud"
 	"github.com/go-playground/validator/v10"
+	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
+	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
 	ses "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses/v20201002"
 )
 
 type TencentCloudEmail struct {
 	client *ses.Client
+}
+
+func GetTencentCloudEmailService(option cloud.Option) (EmailService, error) {
+	if err := option.CheckTencentCloud(); err != nil {
+		return nil, err
+	}
+	credential := common.NewCredential(option.GetSecretID(), option.GetSecretKey())
+	cpf := profile.NewClientProfile()
+	client, err := ses.NewClient(credential, tencentCloudSESSupportedRegion, cpf)
+	if err != nil {
+		return nil, err
+	}
+	return &TencentCloudEmail{client: client}, nil
 }
 
 func (service *TencentCloudEmail) SendEmail(ctx context.Context, email Email) error {

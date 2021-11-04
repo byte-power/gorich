@@ -8,12 +8,33 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/byte-power/gorich/cloud"
 )
 
 type AWSObjectStorageService struct {
 	client     *s3.S3
 	bucketName string
+}
+
+func GetAWSObjectService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
+	if bucketName == "" {
+		return nil, ErrBucketNameEmpty
+	}
+	if err := option.CheckAWS(); err != nil {
+		return nil, err
+	}
+	session, err := session.NewSession(&aws.Config{
+		Region:      aws.String(option.GetRegion()),
+		Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
+	})
+	if err != nil {
+		return nil, err
+	}
+	client := s3.New(session)
+	return &AWSObjectStorageService{client: client, bucketName: bucketName}, nil
 }
 
 func (service *AWSObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error) {

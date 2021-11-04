@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/byte-power/gorich/cloud"
 	"github.com/relvacode/iso8601"
 	"github.com/tencentyun/cos-go-sdk-v5"
 )
@@ -31,6 +32,30 @@ func getTencentCloudServiceURL(region string) (*url.URL, error) {
 
 type TencentCloudObjectStorageService struct {
 	client *cos.Client
+}
+
+func GetTencentCloudObjectService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
+	if bucketName == "" {
+		return nil, ErrBucketNameEmpty
+	}
+	if err := option.CheckTencentCloud(); err != nil {
+		return nil, err
+	}
+	bucketURL, err := getTencentCloudBucketURL(bucketName, option.GetRegion())
+	if err != nil {
+		return nil, err
+	}
+	serviceURL, err := getTencentCloudServiceURL(option.GetRegion())
+	if err != nil {
+		return nil, err
+	}
+	baseURL := &cos.BaseURL{BucketURL: bucketURL, ServiceURL: serviceURL}
+	client := cos.NewClient(baseURL, &http.Client{
+		Transport: &cos.AuthorizationTransport{
+			SecretID:  option.GetSecretID(),
+			SecretKey: option.GetSecretKey(),
+		}})
+	return &TencentCloudObjectStorageService{client: client}, nil
 }
 
 func (service *TencentCloudObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error) {

@@ -4,9 +4,6 @@ import (
 	"context"
 
 	"github.com/byte-power/gorich/cloud"
-	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common"
-	"github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common/profile"
-	tencentCloudSes "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses/v20201002"
 )
 
 type EmailService interface {
@@ -30,18 +27,9 @@ const (
 	EmailStyleText EmailStyle = "text"
 )
 
-func NewEmailService(option cloud.Option) (EmailService, error) {
-	if err := option.Check(); err != nil {
-		return nil, err
-	}
+func GetEmailService(option cloud.Option) (EmailService, error) {
 	if option.GetProvider() == cloud.TencentCloudProvider {
-		credential := common.NewCredential(option.GetSecretID(), option.GetSecretKey())
-		cpf := profile.NewClientProfile()
-		client, err := tencentCloudSes.NewClient(credential, tencentCloudSESSupportedRegion, cpf)
-		if err != nil {
-			return nil, err
-		}
-		return &TencentCloudEmail{client: client}, nil
+		return GetTencentCloudEmailService(option)
 	}
 	return nil, nil
 }

@@ -38,7 +38,15 @@ func (option TencentQueueOption) GetRegion() string {
 	return ""
 }
 
-func (option TencentQueueOption) Check() error {
+func (option TencentQueueOption) CheckAWS() error {
+	return cloud.ErrProviderNotAWS
+}
+
+func (option TencentQueueOption) CheckTencentCloud() error {
+	return option.check()
+}
+
+func (option TencentQueueOption) check() error {
 	if option.Token == "" {
 		return ErrTencentQueueServiceTokenEmpty
 	}
@@ -60,6 +68,34 @@ type TencentQueueService struct {
 	client pulsar.Client
 	topic  string
 	sub    string
+}
+
+func GetTencentCloudQueueService(topicSubName string, option cloud.Option) (QueueService, error) {
+	topic, sub, err := getTopicAndSubName(topicSubName)
+	if err != nil {
+		return nil, fmt.Errorf("parameter TopicSubName invalid format %w", err)
+	}
+	if topic == "" {
+		return nil, ErrTencentQueueServiceEmptyTopic
+	}
+	if sub == "" {
+		return nil, ErrTencentQueueServiceEmptySubscriptionName
+	}
+	if err := option.CheckTencentCloud(); err != nil {
+		return nil, err
+	}
+	queueOption, ok := option.(TencentQueueOption)
+	if !ok {
+		return nil, fmt.Errorf("parameter option %+v should be TencentQueueOption", option)
+	}
+	client, err := pulsar.NewClient(pulsar.ClientOptions{
+		URL:            queueOption.URL,
+		Authentication: pulsar.NewAuthenticationToken(queueOption.Token),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &TencentQueueService{client: client, topic: topic, sub: sub}, nil
 }
 
 func (service *TencentQueueService) CreateProducer() (Producer, error) {
