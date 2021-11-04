@@ -21,11 +21,11 @@ type AWSQueueService struct {
 	queueURL string
 }
 
-func (service *AWSQueueService) GetProducer() (Producer, error) {
+func (service *AWSQueueService) CreateProducer() (Producer, error) {
 	return service, nil
 }
 
-func (service *AWSQueueService) GetConsumer() (Consumer, error) {
+func (service *AWSQueueService) CreateConsumer() (Consumer, error) {
 	return service, nil
 }
 

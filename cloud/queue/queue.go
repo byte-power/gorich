@@ -14,8 +14,8 @@ import (
 )
 
 type QueueService interface {
-	GetProducer() (Producer, error)
-	GetConsumer() (Consumer, error)
+	CreateProducer() (Producer, error)
+	CreateConsumer() (Consumer, error)
 	Close() error
 }
 

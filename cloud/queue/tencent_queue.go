@@ -57,7 +57,7 @@ type TencentQueueService struct {
 	topic  string
 }
 
-func (service *TencentQueueService) GetProducer() (Producer, error) {
+func (service *TencentQueueService) CreateProducer() (Producer, error) {
 	producer, err := service.client.CreateProducer(pulsar.ProducerOptions{Topic: service.topic})
 	if err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (service *TencentQueueService) GetProducer() (Producer, error) {
 	return &TencentQueueProducer{producer: producer}, nil
 }
 
-func (service *TencentQueueService) GetConsumer() (Consumer, error) {
+func (service *TencentQueueService) CreateConsumer() (Consumer, error) {
 	consumer, err := service.client.Subscribe(pulsar.ConsumerOptions{
 		Topic: service.topic,
 		Type:  pulsar.Shared,
