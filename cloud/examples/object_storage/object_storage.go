@@ -13,11 +13,11 @@ import (
 func main() {
 	optionForTencentCloud := cloud.CommonOption{
 		Provider:  cloud.TencentCloudProvider,
-		SecretID:  "tencent_cloud_secret_id_xxx",
-		SecretKey: "tencent_cloud_secret_key_xxx",
-		Region:    "tencent_cloud_region_xxx",
+		SecretID:  "tencentcloud_secret_id_xxx",
+		SecretKey: "tencentcloud_secret_key_xxx",
+		Region:    "tencentcloud_region_xxx",
 	}
-	object_storage_examples("tencent_cloud_bucket_name_xxxx", optionForTencentCloud)
+	object_storage_examples("tencentcloud_bucket_name_xxxx", optionForTencentCloud)
 
 	optionForAWS := cloud.CommonOption{
 		Provider:  cloud.AWSProvider,

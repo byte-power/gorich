@@ -18,8 +18,6 @@ type Email struct {
 	Destinations []string   `validate:"required,dive,required"`
 }
 
-const tencentCloudSESSupportedRegion = "ap-hongkong"
-
 type EmailStyle string
 
 const (
@@ -31,5 +29,5 @@ func GetEmailService(option cloud.Option) (EmailService, error) {
 	if option.GetProvider() == cloud.TencentCloudProvider {
 		return GetTencentCloudEmailService(option)
 	}
-	return nil, nil
+	return nil, cloud.ErrUnsupportedCloudProvider
 }

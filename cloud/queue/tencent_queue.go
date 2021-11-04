@@ -11,60 +11,60 @@ import (
 )
 
 var (
-	ErrTencentQueueServiceTokenEmpty            = errors.New("token for tencent queue service is empty")
-	ErrTencentQueueServiceURLEmpty              = errors.New("url for tencent queue service is empty")
-	ErrTencentQueueServiceEmptySubscriptionName = errors.New("subscription name for tencent queue service is empty")
-	ErrTencentQueueServiceEmptyTopic            = errors.New("topic name for tencent queue service is empty")
+	ErrTencentCloudQueueServiceTokenEmpty            = errors.New("token for tencentcloud queue service is empty")
+	ErrTencentCloudQueueServiceURLEmpty              = errors.New("url for tencentcloud queue service is empty")
+	ErrTencentCloudQueueServiceEmptySubscriptionName = errors.New("subscription name for tencentcloud queue service is empty")
+	ErrTencentCloudQueueServiceEmptyTopic            = errors.New("topic name for tencentcloud queue service is empty")
 )
 
-type TencentQueueOption struct {
+type TencentCloudQueueOption struct {
 	Token string
 	URL   string
 }
 
-func (option TencentQueueOption) GetProvider() cloud.Provider {
+func (option TencentCloudQueueOption) GetProvider() cloud.Provider {
 	return cloud.TencentCloudProvider
 }
 
-func (option TencentQueueOption) GetSecretID() string {
+func (option TencentCloudQueueOption) GetSecretID() string {
 	return option.Token
 }
 
-func (option TencentQueueOption) GetSecretKey() string {
+func (option TencentCloudQueueOption) GetSecretKey() string {
 	return option.Token
 }
 
-func (option TencentQueueOption) GetRegion() string {
+func (option TencentCloudQueueOption) GetRegion() string {
 	return ""
 }
 
-func (option TencentQueueOption) CheckAWS() error {
+func (option TencentCloudQueueOption) CheckAWS() error {
 	return cloud.ErrProviderNotAWS
 }
 
-func (option TencentQueueOption) CheckTencentCloud() error {
+func (option TencentCloudQueueOption) CheckTencentCloud() error {
 	return option.check()
 }
 
-func (option TencentQueueOption) check() error {
+func (option TencentCloudQueueOption) check() error {
 	if option.Token == "" {
-		return ErrTencentQueueServiceTokenEmpty
+		return ErrTencentCloudQueueServiceTokenEmpty
 	}
 	if option.URL == "" {
-		return ErrTencentQueueServiceURLEmpty
+		return ErrTencentCloudQueueServiceURLEmpty
 	}
 	return nil
 }
 
-type TencentQueueMessage struct {
+type TencentCloudQueueMessage struct {
 	message pulsar.Message
 }
 
-func (message *TencentQueueMessage) Body() string {
+func (message *TencentCloudQueueMessage) Body() string {
 	return string(message.message.Payload())
 }
 
-type TencentQueueService struct {
+type TencentCloudQueueService struct {
 	client pulsar.Client
 	topic  string
 	sub    string
@@ -76,17 +76,17 @@ func GetTencentCloudQueueService(topicSubName string, option cloud.Option) (Queu
 		return nil, fmt.Errorf("parameter TopicSubName invalid format %w", err)
 	}
 	if topic == "" {
-		return nil, ErrTencentQueueServiceEmptyTopic
+		return nil, ErrTencentCloudQueueServiceEmptyTopic
 	}
 	if sub == "" {
-		return nil, ErrTencentQueueServiceEmptySubscriptionName
+		return nil, ErrTencentCloudQueueServiceEmptySubscriptionName
 	}
 	if err := option.CheckTencentCloud(); err != nil {
 		return nil, err
 	}
-	queueOption, ok := option.(TencentQueueOption)
+	queueOption, ok := option.(TencentCloudQueueOption)
 	if !ok {
-		return nil, fmt.Errorf("parameter option %+v should be TencentQueueOption", option)
+		return nil, fmt.Errorf("parameter option %+v should be TencentCloudQueueOption", option)
 	}
 	client, err := pulsar.NewClient(pulsar.ClientOptions{
 		URL:            queueOption.URL,
@@ -95,18 +95,18 @@ func GetTencentCloudQueueService(topicSubName string, option cloud.Option) (Queu
 	if err != nil {
 		return nil, err
 	}
-	return &TencentQueueService{client: client, topic: topic, sub: sub}, nil
+	return &TencentCloudQueueService{client: client, topic: topic, sub: sub}, nil
 }
 
-func (service *TencentQueueService) CreateProducer() (Producer, error) {
+func (service *TencentCloudQueueService) CreateProducer() (Producer, error) {
 	producer, err := service.client.CreateProducer(pulsar.ProducerOptions{Topic: service.topic})
 	if err != nil {
 		return nil, err
 	}
-	return &TencentQueueProducer{producer: producer}, nil
+	return &TencentCloudQueueProducer{producer: producer}, nil
 }
 
-func (service *TencentQueueService) CreateConsumer() (Consumer, error) {
+func (service *TencentCloudQueueService) CreateConsumer() (Consumer, error) {
 	consumer, err := service.client.Subscribe(pulsar.ConsumerOptions{
 		Topic:            service.topic,
 		Type:             pulsar.Shared,
@@ -115,51 +115,51 @@ func (service *TencentQueueService) CreateConsumer() (Consumer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TencentQueueConsumer{consumer: consumer}, nil
+	return &TencentCloudQueueConsumer{consumer: consumer}, nil
 }
 
-func (service *TencentQueueService) Close() error {
+func (service *TencentCloudQueueService) Close() error {
 	service.client.Close()
 	return nil
 }
 
-type TencentQueueProducer struct {
+type TencentCloudQueueProducer struct {
 	producer pulsar.Producer
 }
 
-func (producer *TencentQueueProducer) SendMessage(ctx context.Context, body string) error {
+func (producer *TencentCloudQueueProducer) SendMessage(ctx context.Context, body string) error {
 	_, err := producer.producer.Send(ctx, &pulsar.ProducerMessage{Payload: []byte(body)})
 	return err
 }
 
-func (producer *TencentQueueProducer) Close() error {
+func (producer *TencentCloudQueueProducer) Close() error {
 	producer.producer.Close()
 	return nil
 }
 
-type TencentQueueConsumer struct {
+type TencentCloudQueueConsumer struct {
 	consumer pulsar.Consumer
 }
 
-func (consumer *TencentQueueConsumer) ReceiveMessages(ctx context.Context, maxCount int) ([]Message, error) {
+func (consumer *TencentCloudQueueConsumer) ReceiveMessages(ctx context.Context, maxCount int) ([]Message, error) {
 	msg, err := consumer.consumer.Receive(ctx)
 	if err != nil {
 		return nil, err
 	}
-	message := &TencentQueueMessage{message: msg}
+	message := &TencentCloudQueueMessage{message: msg}
 	return []Message{message}, nil
 }
 
-func (consumer *TencentQueueConsumer) AckMessage(ctx context.Context, message Message) error {
-	msg, ok := message.(*TencentQueueMessage)
+func (consumer *TencentCloudQueueConsumer) AckMessage(ctx context.Context, message Message) error {
+	msg, ok := message.(*TencentCloudQueueMessage)
 	if !ok {
-		return errors.New("invalid message type, should be tencent cloud message")
+		return errors.New("invalid message type, should be tencentcloud message")
 	}
 	consumer.consumer.Ack(msg.message)
 	return nil
 }
 
-func (consumer *TencentQueueConsumer) Close() error {
+func (consumer *TencentCloudQueueConsumer) Close() error {
 	consumer.consumer.Close()
 	return nil
 }

@@ -12,9 +12,11 @@ import (
 	ses "github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses/v20201002"
 )
 
-type TencentCloudEmail struct {
+type TencentCloudEmailService struct {
 	client *ses.Client
 }
+
+const tencentCloudSESSupportedRegion = "ap-hongkong"
 
 func GetTencentCloudEmailService(option cloud.Option) (EmailService, error) {
 	if err := option.CheckTencentCloud(); err != nil {
@@ -26,10 +28,10 @@ func GetTencentCloudEmailService(option cloud.Option) (EmailService, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &TencentCloudEmail{client: client}, nil
+	return &TencentCloudEmailService{client: client}, nil
 }
 
-func (service *TencentCloudEmail) SendEmail(ctx context.Context, email Email) error {
+func (service *TencentCloudEmailService) SendEmail(ctx context.Context, email Email) error {
 	if err := validator.New().Struct(email); err != nil {
 		return err
 	}

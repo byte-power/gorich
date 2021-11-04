@@ -9,12 +9,12 @@ type Provider string
 
 const (
 	AWSProvider          Provider = "aws"
-	TencentCloudProvider Provider = "tencent"
+	TencentCloudProvider Provider = "tencentcloud"
 )
 
 var (
 	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s and %s", AWSProvider, TencentCloudProvider)
-	ErrProviderNotTencentCloud  = errors.New("provider is not tencent cloud")
+	ErrProviderNotTencentCloud  = errors.New("provider is not tencentcloud")
 	ErrProviderNotAWS           = errors.New("provider is not aws")
 	ErrEmptySecretID            = errors.New("secret_id is empty")
 	ErrEmptySecretKey           = errors.New("secret_key is empty")
