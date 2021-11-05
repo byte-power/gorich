@@ -1,6 +1,6 @@
 # gorich
 
-## tutorials and examples**
+## tutorials and examples
 
 + [task tutorial](./task/README.md)
 
