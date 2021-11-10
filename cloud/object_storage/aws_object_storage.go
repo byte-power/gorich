@@ -38,7 +38,7 @@ func GetAWSObjectService(bucketName string, option cloud.Option) (ObjectStorageS
 	return &AWSObjectStorageService{client: client, bucketName: bucketName}, nil
 }
 
-func (service *AWSObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error) {
+func (service *AWSObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]Object, *string, error) {
 	opts := &s3.ListObjectsV2Input{
 		Bucket:            &service.bucketName,
 		ContinuationToken: continueToken,
@@ -54,9 +54,9 @@ func (service *AWSObjectStorageService) ListObjects(ctx context.Context, prefix 
 	if err != nil {
 		return nil, nil, err
 	}
-	objects := make([]*Object, 0, len(resp.Contents))
+	objects := make([]Object, 0, len(resp.Contents))
 	for _, obj := range resp.Contents {
-		object := &Object{
+		object := Object{
 			key:          aws.StringValue(obj.Key),
 			eTag:         aws.StringValue(obj.ETag),
 			lastModified: aws.TimeValue(obj.LastModified),
@@ -71,9 +71,9 @@ func (service *AWSObjectStorageService) ListObjects(ctx context.Context, prefix 
 	return objects, nextToken, nil
 }
 
-func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key string) (*Object, error) {
+func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key string) (Object, error) {
 	if key == "" {
-		return nil, ErrObjectKeyEmpty
+		return Object{}, ErrObjectKeyEmpty
 	}
 	resp, err := service.client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
 		Bucket: &service.bucketName,
@@ -81,11 +81,11 @@ func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key stri
 	})
 	if err != nil {
 		if isNotFoundErrorForAWS(err) {
-			return nil, ErrObjectNotFound
+			return Object{}, ErrObjectNotFound
 		}
-		return nil, err
+		return Object{}, err
 	}
-	return &Object{
+	return Object{
 		key:          key,
 		eTag:         aws.StringValue(resp.ETag),
 		lastModified: aws.TimeValue(resp.LastModified),
@@ -93,9 +93,9 @@ func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key stri
 	}, nil
 }
 
-func (service *AWSObjectStorageService) GetObject(ctx context.Context, key string) (*Object, error) {
+func (service *AWSObjectStorageService) GetObject(ctx context.Context, key string) (Object, error) {
 	if key == "" {
-		return nil, ErrObjectKeyEmpty
+		return Object{}, ErrObjectKeyEmpty
 	}
 	resp, err := service.client.GetObjectWithContext(ctx, &s3.GetObjectInput{
 		Bucket: &service.bucketName,
@@ -103,17 +103,17 @@ func (service *AWSObjectStorageService) GetObject(ctx context.Context, key strin
 	})
 	if err != nil {
 		if isNotFoundErrorForAWS(err) {
-			return nil, ErrObjectNotFound
+			return Object{}, ErrObjectNotFound
 		}
-		return nil, err
+		return Object{}, err
 	}
 	bs, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return Object{}, err
 	}
 	defer resp.Body.Close()
 
-	return &Object{
+	return Object{
 		key:             key,
 		isContentLoaded: true,
 		content:         bs,

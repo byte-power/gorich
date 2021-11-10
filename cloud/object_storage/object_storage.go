@@ -15,9 +15,9 @@ var (
 )
 
 type ObjectStorageService interface {
-	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error)
-	HeadObject(ctx context.Context, key string) (*Object, error)
-	GetObject(ctx context.Context, key string) (*Object, error)
+	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]Object, *string, error)
+	HeadObject(ctx context.Context, key string) (Object, error)
+	GetObject(ctx context.Context, key string) (Object, error)
 	PutObject(ctx context.Context, key string, body []byte) error
 	DeleteObject(ctx context.Context, key string) error
 	DeleteObjects(ctx context.Context, keys ...string) error
