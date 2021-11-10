@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -17,12 +18,12 @@ func main() {
 		SecretKey: "tencentcloud_secret_key_xxx",
 		Region:    "tencentcloud_region_xxx",
 	}
-	object_storage_examples("tencentcloud_bucket_name_xxxx", optionForTencentCloud)
+	object_storage_examples("tencentcloud_bucket_name_xxx", optionForTencentCloud)
 
 	optionForAWS := cloud.CommonOption{
 		Provider:  cloud.AWSProvider,
-		SecretID:  "aws_access_key_id_xxx",
-		SecretKey: "aws_access_secret_key_xxx",
+		SecretID:  "aws_secret_id_xxx",
+		SecretKey: "aws_secret_key_xxx",
 		Region:    "aws_region_xxx",
 	}
 	object_storage_examples("aws_bucket_name_xxx", optionForAWS)
@@ -31,7 +32,7 @@ func main() {
 func object_storage_examples(bucketName string, option cloud.Option) {
 	service, err := object_storage.GetObjectStorageService(bucketName, option)
 	if err != nil {
-		fmt.Printf("get service error:%s\n", err)
+		fmt.Printf("GetObjectStorageService error:%s\n", err)
 		return
 	}
 
@@ -40,61 +41,141 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 		"ab.txt": []byte("abcdefg"),
 		"b.txt":  []byte("xyz"),
 	}
+
+	// PUTObject examples
 	for name, content := range files {
 		err = service.PutObject(context.TODO(), name, content)
 		if err != nil {
-			fmt.Printf("put object %s error %s\n", name, err)
+			fmt.Printf("PutObject %s error %s\n", name, err)
 			return
 		}
-		fmt.Printf("put object name:%s content:%s\n", name, string(content))
+		fmt.Printf("PutObject %s content: %s\n", name, string(content))
 	}
 
+	// ListObject examples
 	objects, token, err := service.ListObjects(context.TODO(), "a", nil, 100)
 	if err != nil {
-		fmt.Printf("list object error %s\n", err)
+		fmt.Printf("ListObject error %s\n", err)
 		return
 	}
-	fmt.Printf("token is %v\n", token)
+	fmt.Printf("ListObject token is %v\n", token)
 	for _, object := range objects {
-		fmt.Printf("list object %s, last modified is %+v\n", object.GetKey(), object.GetModifiedTime())
+		fmt.Printf("ListObject %s  Size: %d LastModified: %+v\n", object.GetKey(), object.GetObjectSize(), object.GetModifiedTime())
 	}
 
+	// HeadObject and GetObject examples
 	for name := range files {
-		object, err := service.GetObject(context.TODO(), name)
+		object, err := service.HeadObject(context.TODO(), name)
 		if err != nil {
-			fmt.Printf("get object %s error %s\n", name, err)
-			return
+			if !errors.Is(err, object_storage.ErrObjectNotFound) {
+				fmt.Printf("HeadObject %s error %s\n", name, err)
+				return
+			}
+			fmt.Printf("HeadObject %s not found\n", name)
+		} else {
+			fmt.Printf("HeadObject %s Size: %d LastModified: %+v\n", name, object.GetObjectSize(), object.GetModifiedTime())
 		}
-		content, err := object.GetContent()
+
+		object, err = service.GetObject(context.TODO(), name)
 		if err != nil {
-			fmt.Printf("get object content error %s\n", err)
-			return
+			if !errors.Is(err, object_storage.ErrObjectNotFound) {
+				fmt.Printf("GetObject %s error %s\n", name, err)
+				return
+			}
+			fmt.Printf("GetObject %s not found\n", name)
+		} else {
+			content, err := object.GetContent()
+			if err != nil {
+				fmt.Printf("GetObject %s content error %s\n", name, err)
+				return
+			}
+			fmt.Printf("GetObject %s Content: %s Size: %d, LastModified: %+v\n", name, string(content), object.GetObjectSize(), object.GetModifiedTime())
 		}
-		fmt.Printf("get object content is %s, last_modified is %+v\n", string(content), object.GetModifiedTime())
 	}
 
+	// GetSignedURLForExistedKey examples
+	for name := range files {
+		url, err := service.GetSignedURLForExistedKey(context.TODO(), name, 5*time.Second)
+		if err != nil {
+			if !errors.Is(err, object_storage.ErrObjectNotFound) {
+				fmt.Printf("GetSignedURLForExistedKey error %s\n", err)
+				return
+			}
+			fmt.Printf("GetSignedURLForExistedKey not found %s\n", name)
+		} else {
+			fmt.Printf("GetSignedURLForExistedKey %s URL: %s\n", name, url)
+		}
+	}
+
+	// DeleteObject examples
 	name := "a.txt"
 	err = service.DeleteObject(context.TODO(), name)
 	if err != nil {
-		fmt.Printf("delete object %s error %s\n", name, err)
+		fmt.Printf("DeleteObject %s error %s\n", name, err)
 		return
 	}
-	fmt.Printf("delete object %s\n", name)
+	fmt.Printf("DeleteObject %s\n", name)
 
+	// DeleteObjects examples
 	names := []string{"a.txt", "b.txt", "ab.txt"}
 	err = service.DeleteObjects(context.TODO(), names...)
 	if err != nil {
-		fmt.Printf("delete objects error %s\n", err)
+		fmt.Printf("DeleteObjects error %s\n", err)
 		return
 	}
-	fmt.Printf("delete objects %+v\n", names)
+	fmt.Printf("DeleteObjects %+v\n", names)
 
+	// GetSignedURL examples
 	for name := range files {
 		url, err := service.GetSignedURL(name, 1*time.Hour)
 		if err != nil {
-			fmt.Printf("get signed url for object %s error %s\n", name, err)
+			fmt.Printf("GetSignedURL for object %s error %s\n", name, err)
 			return
 		}
-		fmt.Printf("get signed url for object %s %s\n", name, url)
+		fmt.Printf("GetSignedURL for object %s %s\n", name, url)
+	}
+
+	// HeadObject and GetObject for non-exist keys examples, will return error
+	for name := range files {
+		object, err := service.HeadObject(context.TODO(), name)
+		if err != nil {
+			if !errors.Is(err, object_storage.ErrObjectNotFound) {
+				fmt.Printf("HeadObject %s error %s\n", name, err)
+				return
+			}
+			fmt.Printf("HeadObject %s not found\n", name)
+		} else {
+			fmt.Printf("HeadObject %s Size: %d LastModified: %+v\n", name, object.GetObjectSize(), object.GetModifiedTime())
+		}
+
+		object, err = service.GetObject(context.TODO(), name)
+		if err != nil {
+			if !errors.Is(err, object_storage.ErrObjectNotFound) {
+				fmt.Printf("GetObject %s error %s\n", name, err)
+				return
+			}
+			fmt.Printf("GetObject %s not found\n", name)
+		} else {
+			content, err := object.GetContent()
+			if err != nil {
+				fmt.Printf("GetObject %s content error %s\n", name, err)
+				return
+			}
+			fmt.Printf("GetObject %s Content: %s Size: %d, LastModified: %+v\n", name, string(content), object.GetObjectSize(), object.GetModifiedTime())
+		}
+	}
+
+	// GetSignedURLForExistedKey examples for non-exist keys, will return error
+	for name := range files {
+		url, err := service.GetSignedURLForExistedKey(context.TODO(), name, 5*time.Second)
+		if err != nil {
+			if !errors.Is(err, object_storage.ErrObjectNotFound) {
+				fmt.Printf("GetSignedURLForExistedKey error %s\n", err)
+				return
+			}
+			fmt.Printf("GetSignedURLForExistedKey not found %s\n", name)
+		} else {
+			fmt.Printf("GetSignedURLForExistedKey %s %s\n", name, url)
+		}
 	}
 }
