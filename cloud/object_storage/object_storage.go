@@ -11,15 +11,19 @@ import (
 var (
 	ErrObjectKeyEmpty  = errors.New("object key is empty")
 	ErrBucketNameEmpty = errors.New("bucket name is empty")
+	ErrObjectNotFound  = errors.New("object is not found")
 )
 
 type ObjectStorageService interface {
-	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error)
-	GetObject(ctx context.Context, key string) (*Object, error)
+	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]Object, *string, error)
+	HeadObject(ctx context.Context, key string) (Object, error)
+	GetObject(ctx context.Context, key string) (Object, error)
 	PutObject(ctx context.Context, key string, body []byte) error
 	DeleteObject(ctx context.Context, key string) error
 	DeleteObjects(ctx context.Context, keys ...string) error
 	GetSignedURL(key string, duration time.Duration) (string, error)
+	//GetSignedURLForExistedKey generates signed url if key exists. If key does not exist, return error
+	GetSignedURLForExistedKey(ctx context.Context, key string, duration time.Duration) (string, error)
 }
 
 type Object struct {
@@ -44,6 +48,10 @@ func (object Object) GetContent() ([]byte, error) {
 
 func (object Object) GetModifiedTime() time.Time {
 	return object.lastModified
+}
+
+func (object Object) GetObjectSize() int64 {
+	return object.size
 }
 
 func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStorageService, error) {

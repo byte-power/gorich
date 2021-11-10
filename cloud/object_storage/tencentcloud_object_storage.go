@@ -58,7 +58,7 @@ func GetTencentCloudObjectService(bucketName string, option cloud.Option) (Objec
 	return &TencentCloudObjectStorageService{client: client}, nil
 }
 
-func (service *TencentCloudObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]*Object, *string, error) {
+func (service *TencentCloudObjectStorageService) ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]Object, *string, error) {
 	var marker string
 	if continueToken == nil {
 		marker = ""
@@ -74,13 +74,13 @@ func (service *TencentCloudObjectStorageService) ListObjects(ctx context.Context
 	if err != nil {
 		return nil, nil, err
 	}
-	objects := make([]*Object, 0, len(resp.Contents))
+	objects := make([]Object, 0, len(resp.Contents))
 	for _, obj := range resp.Contents {
 		lastModified, err := iso8601.ParseString(obj.LastModified)
 		if err != nil {
 			return nil, nil, err
 		}
-		object := &Object{
+		object := Object{
 			key:          obj.Key,
 			eTag:         obj.ETag,
 			size:         obj.Size,
@@ -95,29 +95,60 @@ func (service *TencentCloudObjectStorageService) ListObjects(ctx context.Context
 	return objects, nextToken, nil
 }
 
-func (service *TencentCloudObjectStorageService) GetObject(ctx context.Context, key string) (*Object, error) {
+func (service *TencentCloudObjectStorageService) HeadObject(ctx context.Context, key string) (Object, error) {
 	if key == "" {
-		return nil, ErrObjectKeyEmpty
+		return Object{}, ErrObjectKeyEmpty
+	}
+	resp, err := service.client.Object.Head(ctx, key, nil)
+	if err != nil {
+		if cos.IsNotFoundError(err) {
+			return Object{}, ErrObjectNotFound
+		}
+		return Object{}, err
+	}
+
+	lastModified, err := parseLastModifiedFromHeader(resp.Header)
+	if err != nil {
+		return Object{}, fmt.Errorf("parse header %s error: %+v %w", httpLastModifiedHeader, resp.Header[httpLastModifiedHeader], err)
+	}
+	eTag, err := parseEtagFromHeader(resp.Header)
+	if err != nil {
+		return Object{}, fmt.Errorf("parse header %s error: %+v %w", httpEtagHeader, resp.Header[httpEtagHeader], err)
+	}
+	return Object{
+		key:          key,
+		eTag:         eTag,
+		lastModified: lastModified,
+		size:         resp.ContentLength,
+	}, nil
+}
+
+func (service *TencentCloudObjectStorageService) GetObject(ctx context.Context, key string) (Object, error) {
+	if key == "" {
+		return Object{}, ErrObjectKeyEmpty
 	}
 	resp, err := service.client.Object.Get(ctx, key, nil)
 	if err != nil {
-		return nil, err
+		if cos.IsNotFoundError(err) {
+			return Object{}, ErrObjectNotFound
+		}
+		return Object{}, err
 	}
 	bs, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return Object{}, err
 	}
 	defer resp.Body.Close()
 
 	lastModified, err := parseLastModifiedFromHeader(resp.Header)
 	if err != nil {
-		return nil, fmt.Errorf("parse header %s error: %+v %w", httpLastModifiedHeader, resp.Header[httpLastModifiedHeader], err)
+		return Object{}, fmt.Errorf("parse header %s error: %+v %w", httpLastModifiedHeader, resp.Header[httpLastModifiedHeader], err)
 	}
 	eTag, err := parseEtagFromHeader(resp.Header)
 	if err != nil {
-		return nil, fmt.Errorf("parse header %s error: %+v %w", httpEtagHeader, resp.Header[httpEtagHeader], err)
+		return Object{}, fmt.Errorf("parse header %s error: %+v %w", httpEtagHeader, resp.Header[httpEtagHeader], err)
 	}
-	return &Object{
+	return Object{
 		key:             key,
 		isContentLoaded: true,
 		content:         bs,
@@ -192,4 +223,15 @@ func (service *TencentCloudObjectStorageService) GetSignedURL(key string, durati
 		return "", err
 	}
 	return url.String(), nil
+}
+
+func (service *TencentCloudObjectStorageService) GetSignedURLForExistedKey(ctx context.Context, key string, duration time.Duration) (string, error) {
+	if key == "" {
+		return "", ErrObjectKeyEmpty
+	}
+	_, err := service.HeadObject(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	return service.GetSignedURL(key, duration)
 }
