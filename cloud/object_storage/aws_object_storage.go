@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -70,6 +71,28 @@ func (service *AWSObjectStorageService) ListObjects(ctx context.Context, prefix 
 	return objects, nextToken, nil
 }
 
+func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key string) (*Object, error) {
+	if key == "" {
+		return nil, ErrObjectKeyEmpty
+	}
+	resp, err := service.client.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+		Bucket: &service.bucketName,
+		Key:    &key,
+	})
+	if err != nil {
+		if isNotFoundErrorForAWS(err) {
+			return nil, ErrObjectNotFound
+		}
+		return nil, err
+	}
+	return &Object{
+		key:          key,
+		eTag:         aws.StringValue(resp.ETag),
+		lastModified: aws.TimeValue(resp.LastModified),
+		size:         aws.Int64Value(resp.ContentLength),
+	}, nil
+}
+
 func (service *AWSObjectStorageService) GetObject(ctx context.Context, key string) (*Object, error) {
 	if key == "" {
 		return nil, ErrObjectKeyEmpty
@@ -79,6 +102,9 @@ func (service *AWSObjectStorageService) GetObject(ctx context.Context, key strin
 		Key:    &key,
 	})
 	if err != nil {
+		if isNotFoundErrorForAWS(err) {
+			return nil, ErrObjectNotFound
+		}
 		return nil, err
 	}
 	bs, err := ioutil.ReadAll(resp.Body)
@@ -152,4 +178,26 @@ func (service *AWSObjectStorageService) GetSignedURL(key string, duration time.D
 		return "", err
 	}
 	return url, err
+}
+
+func (service *AWSObjectStorageService) GetSignedURLForExistedKey(ctx context.Context, key string, duration time.Duration) (string, error) {
+	if key == "" {
+		return "", ErrObjectKeyEmpty
+	}
+	_, err := service.HeadObject(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	return service.GetSignedURL(key, duration)
+}
+
+func isNotFoundErrorForAWS(err error) bool {
+	awsErr, ok := err.(awserr.Error)
+	if !ok {
+		return false
+	}
+	if awsErr.Code() == "NotFound" || awsErr.Code() == "NoSuchKey" {
+		return true
+	}
+	return false
 }
