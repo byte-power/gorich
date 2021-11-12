@@ -90,6 +90,7 @@ func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key stri
 		eTag:         aws.StringValue(resp.ETag),
 		lastModified: aws.TimeValue(resp.LastModified),
 		size:         aws.Int64Value(resp.ContentLength),
+		contentType:  aws.StringValue(resp.ContentType),
 	}, nil
 }
 
@@ -120,17 +121,24 @@ func (service *AWSObjectStorageService) GetObject(ctx context.Context, key strin
 		eTag:            aws.StringValue(resp.ETag),
 		lastModified:    aws.TimeValue(resp.LastModified),
 		size:            int64(len(bs)),
+		contentType:     aws.StringValue(resp.ContentType),
 	}, nil
 }
 
-func (service *AWSObjectStorageService) PutObject(ctx context.Context, key string, body []byte) error {
+func (service *AWSObjectStorageService) PutObject(ctx context.Context, key string, input *PutObjectInput) error {
 	if key == "" {
 		return ErrObjectKeyEmpty
+	}
+	if input == nil {
+		return errors.New("parameter input is nil")
 	}
 	opts := &s3.PutObjectInput{
 		Bucket: &service.bucketName,
 		Key:    &key,
-		Body:   bytes.NewReader(body),
+		Body:   bytes.NewReader(input.Body),
+	}
+	if input.ContentType != "" {
+		opts.ContentType = &input.ContentType
 	}
 	_, err := service.client.PutObjectWithContext(ctx, opts)
 	return err
