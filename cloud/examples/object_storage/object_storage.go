@@ -36,31 +36,32 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 		return
 	}
 
-	files := map[string][]byte{
-		"a.txt":  []byte("abc"),
-		"ab.txt": []byte("abcdefg"),
-		"b.txt":  []byte("xyz"),
+	files := map[string]*object_storage.PutObjectInput{
+		"abc/a.txt":  {Body: []byte("abc"), ContentType: "application/json"},
+		"abc/ab.txt": {Body: []byte("abcdefg"), ContentType: "text/html"},
+		"bc/b.txt":   {Body: []byte("xyz")},
 	}
 
 	// PUTObject examples
-	for name, content := range files {
-		err = service.PutObject(context.TODO(), name, content)
+	for name, input := range files {
+		err = service.PutObject(context.TODO(), name, input)
 		if err != nil {
 			fmt.Printf("PutObject %s error %s\n", name, err)
 			return
 		}
-		fmt.Printf("PutObject %s content: %s\n", name, string(content))
+		fmt.Printf("PutObject %s Content: %s ContentType:%s\n", name, string(input.Body), input.ContentType)
 	}
 
 	// ListObject examples
-	objects, token, err := service.ListObjects(context.TODO(), "a", nil, 100)
+	objects, token, err := service.ListObjects(context.TODO(), "abc/", nil, 100)
 	if err != nil {
 		fmt.Printf("ListObject error %s\n", err)
 		return
 	}
 	fmt.Printf("ListObject token is %v\n", token)
+	// Note: content type is empty string since list does not return content type info.
 	for _, object := range objects {
-		fmt.Printf("ListObject %s  Size: %d LastModified: %+v\n", object.GetKey(), object.GetObjectSize(), object.GetModifiedTime())
+		fmt.Printf("ListObject %s  Size: %d LastModified: %+v ContentType: %s\n", object.GetKey(), object.GetObjectSize(), object.GetModifiedTime(), object.GetContentType())
 	}
 
 	// HeadObject and GetObject examples
@@ -73,7 +74,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 			}
 			fmt.Printf("HeadObject %s not found\n", name)
 		} else {
-			fmt.Printf("HeadObject %s Size: %d LastModified: %+v\n", name, object.GetObjectSize(), object.GetModifiedTime())
+			fmt.Printf("HeadObject %s Size: %d LastModified: %+v ContentType: %s\n", object.GetKey(), object.GetObjectSize(), object.GetModifiedTime(), object.GetContentType())
 		}
 
 		object, err = service.GetObject(context.TODO(), name)
@@ -89,7 +90,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 				fmt.Printf("GetObject %s content error %s\n", name, err)
 				return
 			}
-			fmt.Printf("GetObject %s Content: %s Size: %d, LastModified: %+v\n", name, string(content), object.GetObjectSize(), object.GetModifiedTime())
+			fmt.Printf("GetObject %s Content: %s Size: %d, LastModified: %+v, ContentType: %s\n", object.GetKey(), string(content), object.GetObjectSize(), object.GetModifiedTime(), object.GetContentType())
 		}
 	}
 
@@ -108,7 +109,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 	}
 
 	// DeleteObject examples
-	name := "a.txt"
+	name := "abc/a.txt"
 	err = service.DeleteObject(context.TODO(), name)
 	if err != nil {
 		fmt.Printf("DeleteObject %s error %s\n", name, err)
@@ -117,7 +118,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 	fmt.Printf("DeleteObject %s\n", name)
 
 	// DeleteObjects examples
-	names := []string{"a.txt", "b.txt", "ab.txt"}
+	names := []string{"abc/a.txt", "bc/b.txt", "abc/ab.txt"}
 	err = service.DeleteObjects(context.TODO(), names...)
 	if err != nil {
 		fmt.Printf("DeleteObjects error %s\n", err)
@@ -145,7 +146,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 			}
 			fmt.Printf("HeadObject %s not found\n", name)
 		} else {
-			fmt.Printf("HeadObject %s Size: %d LastModified: %+v\n", name, object.GetObjectSize(), object.GetModifiedTime())
+			fmt.Printf("HeadObject %s Size: %d LastModified: %+v ContentType: %s\n", object.GetKey(), object.GetObjectSize(), object.GetModifiedTime(), object.GetContentType())
 		}
 
 		object, err = service.GetObject(context.TODO(), name)
@@ -161,7 +162,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 				fmt.Printf("GetObject %s content error %s\n", name, err)
 				return
 			}
-			fmt.Printf("GetObject %s Content: %s Size: %d, LastModified: %+v\n", name, string(content), object.GetObjectSize(), object.GetModifiedTime())
+			fmt.Printf("GetObject %s Content: %s Size: %d, LastModified: %+v, ContentType: %s\n", object.GetKey(), string(content), object.GetObjectSize(), object.GetModifiedTime(), object.GetContentType())
 		}
 	}
 
