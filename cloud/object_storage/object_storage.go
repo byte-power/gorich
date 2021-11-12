@@ -18,12 +18,17 @@ type ObjectStorageService interface {
 	ListObjects(ctx context.Context, prefix string, continueToken *string, maxObjects int) ([]Object, *string, error)
 	HeadObject(ctx context.Context, key string) (Object, error)
 	GetObject(ctx context.Context, key string) (Object, error)
-	PutObject(ctx context.Context, key string, body []byte) error
+	PutObject(ctx context.Context, key string, input *PutObjectInput) error
 	DeleteObject(ctx context.Context, key string) error
 	DeleteObjects(ctx context.Context, keys ...string) error
 	GetSignedURL(key string, duration time.Duration) (string, error)
 	//GetSignedURLForExistedKey generates signed url if key exists. If key does not exist, return error
 	GetSignedURLForExistedKey(ctx context.Context, key string, duration time.Duration) (string, error)
+}
+
+type PutObjectInput struct {
+	Body        []byte
+	ContentType string
 }
 
 type Object struct {

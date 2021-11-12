@@ -180,11 +180,22 @@ func parseEtagFromHeader(headers http.Header) (string, error) {
 	return header[0], nil
 }
 
-func (service *TencentCloudObjectStorageService) PutObject(ctx context.Context, key string, body []byte) error {
+func (service *TencentCloudObjectStorageService) PutObject(ctx context.Context, key string, input *PutObjectInput) error {
 	if key == "" {
 		return ErrObjectKeyEmpty
 	}
-	_, err := service.client.Object.Put(ctx, key, bytes.NewReader(body), nil)
+	if input == nil {
+		return errors.New("parameter input is nil")
+	}
+	var opts *cos.ObjectPutOptions
+	if input.ContentType != "" {
+		opts = &cos.ObjectPutOptions{
+			ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
+				ContentType: input.ContentType,
+			},
+		}
+	}
+	_, err := service.client.Object.Put(ctx, key, bytes.NewReader(input.Body), opts)
 	return err
 }
 

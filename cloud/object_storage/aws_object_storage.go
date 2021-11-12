@@ -123,14 +123,20 @@ func (service *AWSObjectStorageService) GetObject(ctx context.Context, key strin
 	}, nil
 }
 
-func (service *AWSObjectStorageService) PutObject(ctx context.Context, key string, body []byte) error {
+func (service *AWSObjectStorageService) PutObject(ctx context.Context, key string, input *PutObjectInput) error {
 	if key == "" {
 		return ErrObjectKeyEmpty
+	}
+	if input == nil {
+		return errors.New("parameter input is nil")
 	}
 	opts := &s3.PutObjectInput{
 		Bucket: &service.bucketName,
 		Key:    &key,
-		Body:   bytes.NewReader(body),
+		Body:   bytes.NewReader(input.Body),
+	}
+	if input.ContentType != "" {
+		opts.ContentType = &input.ContentType
 	}
 	_, err := service.client.PutObjectWithContext(ctx, opts)
 	return err
