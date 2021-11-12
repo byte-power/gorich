@@ -90,6 +90,7 @@ func (service *AWSObjectStorageService) HeadObject(ctx context.Context, key stri
 		eTag:         aws.StringValue(resp.ETag),
 		lastModified: aws.TimeValue(resp.LastModified),
 		size:         aws.Int64Value(resp.ContentLength),
+		contentType:  aws.StringValue(resp.ContentType),
 	}, nil
 }
 
@@ -120,6 +121,7 @@ func (service *AWSObjectStorageService) GetObject(ctx context.Context, key strin
 		eTag:            aws.StringValue(resp.ETag),
 		lastModified:    aws.TimeValue(resp.LastModified),
 		size:            int64(len(bs)),
+		contentType:     aws.StringValue(resp.ContentType),
 	}, nil
 }
 

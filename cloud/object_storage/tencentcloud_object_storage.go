@@ -18,6 +18,7 @@ import (
 const (
 	httpLastModifiedHeader = "Last-Modified"
 	httpEtagHeader         = "Etag"
+	httpContentTypeHeader  = "Content-Type"
 )
 
 func getTencentCloudBucketURL(name, region string) (*url.URL, error) {
@@ -120,6 +121,7 @@ func (service *TencentCloudObjectStorageService) HeadObject(ctx context.Context,
 		eTag:         eTag,
 		lastModified: lastModified,
 		size:         resp.ContentLength,
+		contentType:  parseContentTypeFromHeader(resp.Header),
 	}, nil
 }
 
@@ -155,6 +157,7 @@ func (service *TencentCloudObjectStorageService) GetObject(ctx context.Context, 
 		eTag:            eTag,
 		size:            int64(len(bs)),
 		lastModified:    lastModified,
+		contentType:     parseContentTypeFromHeader(resp.Header),
 	}, nil
 }
 
@@ -178,6 +181,14 @@ func parseEtagFromHeader(headers http.Header) (string, error) {
 		return "", fmt.Errorf("header %s format is invalid: %+v", httpEtagHeader, header)
 	}
 	return header[0], nil
+}
+
+func parseContentTypeFromHeader(headers http.Header) string {
+	header := headers[httpContentTypeHeader]
+	if len(header) < 1 {
+		return ""
+	}
+	return header[0]
 }
 
 func (service *TencentCloudObjectStorageService) PutObject(ctx context.Context, key string, input *PutObjectInput) error {

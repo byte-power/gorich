@@ -38,6 +38,7 @@ type Object struct {
 	eTag            string
 	lastModified    time.Time
 	size            int64
+	contentType     string
 }
 
 func (object Object) GetKey() string {
@@ -57,6 +58,10 @@ func (object Object) GetModifiedTime() time.Time {
 
 func (object Object) GetObjectSize() int64 {
 	return object.size
+}
+
+func (object Object) GetContentType() string {
+	return object.contentType
 }
 
 func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
