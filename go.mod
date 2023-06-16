@@ -12,6 +12,5 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.278
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses v1.0.278
-	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tdmq v1.0.283
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
 )

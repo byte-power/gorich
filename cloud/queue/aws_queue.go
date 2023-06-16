@@ -6,7 +6,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/byte-power/gorich/cloud"
 )
@@ -33,14 +35,19 @@ func GetAWSQueueService(queueName string, option cloud.Option) (QueueService, er
 	if err := option.CheckAWS(); err != nil {
 		return nil, err
 	}
-	session, err := session.NewSession(&aws.Config{
-		Region:      aws.String(option.GetRegion()),
-		Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
-	})
+
+	sess, creds, err := cloud.AwsNewSession(option)
 	if err != nil {
 		return nil, err
 	}
-	client := sqs.New(session)
+	var client *sqs.SQS
+	// Assume the specified role
+	if creds != nil {
+		client = sqs.New(sess, &aws.Config{Credentials: creds})
+	} else {
+		client = sqs.New(sess)
+	}
+
 	input := &sqs.GetQueueUrlInput{QueueName: aws.String(queueName)}
 	output, err := client.GetQueueUrl(input)
 	if err != nil {

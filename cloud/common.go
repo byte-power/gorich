@@ -3,6 +3,11 @@ package cloud
 import (
 	"errors"
 	"fmt"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
+	"github.com/aws/aws-sdk-go/aws/session"
 )
 
 type Provider string
@@ -25,6 +30,7 @@ type Option interface {
 	GetProvider() Provider
 	GetSecretID() string
 	GetSecretKey() string
+	GetAssumeRoleArn() string
 	GetRegion() string
 
 	CheckAWS() error
@@ -32,10 +38,11 @@ type Option interface {
 }
 
 type CommonOption struct {
-	Provider  Provider
-	SecretID  string
-	SecretKey string
-	Region    string
+	Provider      Provider
+	SecretID      string
+	SecretKey     string
+	AssumeRoleArn string
+	Region        string
 }
 
 func (option CommonOption) GetProvider() Provider {
@@ -54,15 +61,22 @@ func (option CommonOption) GetRegion() string {
 	return option.Region
 }
 
+func (option CommonOption) GetAssumeRoleArn() string {
+	return option.AssumeRoleArn
+}
+
 func (option CommonOption) check() error {
+	if option.Region == "" {
+		return ErrEmptyRegion
+	}
+	if option.Provider == AWSProvider { // aws 不用 aksk的方式了
+		return nil
+	}
 	if option.SecretID == "" {
 		return ErrEmptySecretID
 	}
 	if option.SecretKey == "" {
 		return ErrEmptySecretKey
-	}
-	if option.Region == "" {
-		return ErrEmptyRegion
 	}
 	return nil
 }
@@ -79,4 +93,28 @@ func (option CommonOption) CheckTencentCloud() error {
 		return ErrProviderNotTencentCloud
 	}
 	return option.check()
+}
+
+// AwsNewSession
+func AwsNewSession(option Option) (*session.Session, *credentials.Credentials, error) {
+	var creds *credentials.Credentials
+	if option.GetSecretID() != "" && option.GetSecretKey() != "" {
+		creds = credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), "")
+	}
+
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config: aws.Config{
+			CredentialsChainVerboseErrors: aws.Bool(true),
+			Credentials:                   creds, // 可能是nil
+			Region:                        aws.String(option.GetRegion()),
+		},
+		SharedConfigState: session.SharedConfigEnable,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if option.GetAssumeRoleArn() != "" { // 切换 assumeRole
+		creds = stscreds.NewCredentials(sess, option.GetAssumeRoleArn())
+	}
+	return sess, creds, nil
 }

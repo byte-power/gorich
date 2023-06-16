@@ -207,8 +207,6 @@ github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.278/go.mod 
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/kms v1.0.194/go.mod h1:yrBKWhChnDqNz1xuXdSbWXG56XawEq0G5j1lg4VwBD4=
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses v1.0.278 h1:Ply0VdtWQY1U54KYkf+qQzp0MjLt1t+1g4SYnbitMGQ=
 github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses v1.0.278/go.mod h1:rfNbJIKJr9tt/exfTQhiF8Gh7DWl5cRZY6x5lZtTpaA=
-github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tdmq v1.0.283 h1:wFXFaLxEMw1c15EfLxZa+EF15bmQ4iVCp2FMtzU3v1U=
-github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/tdmq v1.0.283/go.mod h1:fchXZhmqaYaG2c4wTCBTdnW6TFAtxl3D/P/yuuuLMfA=
 github.com/tencentyun/cos-go-sdk-v5 v0.7.31 h1:NujkkOKMJ3IFs1+trCwXOKRCIPQ8qI5Lxul9JkhTg6M=
 github.com/tencentyun/cos-go-sdk-v5 v0.7.31/go.mod h1:4E4+bQ2gBVJcgEC9Cufwylio4mXOct2iu05WjgEBx1o=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
