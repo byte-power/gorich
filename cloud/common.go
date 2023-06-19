@@ -108,7 +108,7 @@ func AwsNewSession(option Option) (*session.Session, *credentials.Credentials, e
 			Credentials:                   creds, // 可能是nil
 			Region:                        aws.String(option.GetRegion()),
 		},
-		SharedConfigState: session.SharedConfigEnable,
+		SharedConfigState: session.SharedConfigDisable, // 不希望使用 ~/.aws/config
 	})
 	if err != nil {
 		return nil, nil, err
