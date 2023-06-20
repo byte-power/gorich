@@ -32,7 +32,7 @@ type Option interface {
 	GetSecretKey() string
 	GetAssumeRoleArn() string
 	GetRegion() string
-
+	GetAssumeRegion() string
 	CheckAWS() error
 	CheckTencentCloud() error
 }
@@ -43,6 +43,7 @@ type CommonOption struct {
 	SecretKey     string
 	AssumeRoleArn string
 	Region        string
+	AssumeRegion  string
 }
 
 func (option CommonOption) GetProvider() Provider {
@@ -63,6 +64,14 @@ func (option CommonOption) GetRegion() string {
 
 func (option CommonOption) GetAssumeRoleArn() string {
 	return option.AssumeRoleArn
+}
+
+// GetAssumeRegion 多数情况 region 和 assume region 是同一个region,全球区可能出现不一致的场景
+func (option CommonOption) GetAssumeRegion() string {
+	if option.AssumeRegion == "" {
+		return option.GetRegion()
+	}
+	return option.AssumeRegion
 }
 
 func (option CommonOption) check() error {
@@ -96,7 +105,7 @@ func (option CommonOption) CheckTencentCloud() error {
 }
 
 // AwsNewSession
-func AwsNewSession(option Option) (*session.Session, *credentials.Credentials, error) {
+func AwsNewSession(option Option) (*session.Session, *aws.Config, error) {
 	var creds *credentials.Credentials
 	if option.GetSecretID() != "" && option.GetSecretKey() != "" {
 		creds = credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), "")
@@ -106,15 +115,17 @@ func AwsNewSession(option Option) (*session.Session, *credentials.Credentials, e
 		Config: aws.Config{
 			CredentialsChainVerboseErrors: aws.Bool(true),
 			Credentials:                   creds, // 可能是nil
+			LogLevel:                      aws.LogLevel(aws.LogDebug),
 			Region:                        aws.String(option.GetRegion()),
 		},
-		SharedConfigState: session.SharedConfigDisable, // 不希望使用 ~/.aws/config
+		SharedConfigFiles: []string{},
 	})
 	if err != nil {
 		return nil, nil, err
 	}
-	if option.GetAssumeRoleArn() != "" { // 切换 assumeRole
-		creds = stscreds.NewCredentials(sess, option.GetAssumeRoleArn())
+	if roleArn := option.GetAssumeRoleArn(); roleArn != "" { // 切换 assumeRole
+		assumeRoleCreds := stscreds.NewCredentials(sess, roleArn)
+		return sess, aws.NewConfig().WithCredentials(assumeRoleCreds).WithRegion(option.GetAssumeRegion()), nil
 	}
-	return sess, creds, nil
+	return sess, nil, nil
 }

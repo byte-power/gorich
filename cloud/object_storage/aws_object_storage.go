@@ -26,14 +26,14 @@ func GetAWSObjectService(bucketName string, option cloud.Option) (ObjectStorageS
 	if err := option.CheckAWS(); err != nil {
 		return nil, err
 	}
-	sess, creds, err := cloud.AwsNewSession(option)
+	sess, cfg, err := cloud.AwsNewSession(option)
 	if err != nil {
 		return nil, err
 	}
 	var client *s3.S3
 	// Assume the specified role
-	if creds != nil {
-		client = s3.New(sess, &aws.Config{Credentials: creds})
+	if cfg != nil {
+		client = s3.New(sess, cfg)
 	} else {
 		client = s3.New(sess)
 	}

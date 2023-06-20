@@ -33,14 +33,14 @@ func GetAWSQueueService(queueName string, option cloud.Option) (QueueService, er
 		return nil, err
 	}
 
-	sess, creds, err := cloud.AwsNewSession(option)
+	sess, cfg, err := cloud.AwsNewSession(option)
 	if err != nil {
 		return nil, err
 	}
 	var client *sqs.SQS
 	// Assume the specified role
-	if creds != nil {
-		client = sqs.New(sess, &aws.Config{Credentials: creds})
+	if cfg != nil {
+		client = sqs.New(sess, cfg)
 	} else {
 		client = sqs.New(sess)
 	}

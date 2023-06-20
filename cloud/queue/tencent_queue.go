@@ -43,6 +43,10 @@ func (option TencentCloudQueueOption) GetRegion() string {
 	return ""
 }
 
+func (option TencentCloudQueueOption) GetAssumeRegion() string {
+	return ""
+}
+
 func (option TencentCloudQueueOption) CheckAWS() error {
 	return cloud.ErrProviderNotAWS
 }
