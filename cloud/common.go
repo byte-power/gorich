@@ -115,8 +115,8 @@ func AwsNewSession(option Option) (*session.Session, *aws.Config, error) {
 		Config: aws.Config{
 			CredentialsChainVerboseErrors: aws.Bool(true),
 			Credentials:                   creds, // 可能是nil
-			LogLevel:                      aws.LogLevel(aws.LogDebug),
-			Region:                        aws.String(option.GetRegion()),
+			// LogLevel:                      aws.LogLevel(aws.LogDebug),
+			Region: aws.String(option.GetRegion()),
 		},
 		SharedConfigFiles: []string{},
 	})
