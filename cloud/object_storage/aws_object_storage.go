@@ -9,9 +9,8 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+
 	"github.com/byte-power/gorich/cloud"
 )
 
@@ -27,14 +26,17 @@ func GetAWSObjectService(bucketName string, option cloud.Option) (ObjectStorageS
 	if err := option.CheckAWS(); err != nil {
 		return nil, err
 	}
-	session, err := session.NewSession(&aws.Config{
-		Region:      aws.String(option.GetRegion()),
-		Credentials: credentials.NewStaticCredentials(option.GetSecretID(), option.GetSecretKey(), ""),
-	})
+	sess, cfg, err := cloud.AwsNewSession(option)
 	if err != nil {
 		return nil, err
 	}
-	client := s3.New(session)
+	var client *s3.S3
+	// Assume the specified role
+	if cfg != nil {
+		client = s3.New(sess, cfg)
+	} else {
+		client = s3.New(sess)
+	}
 	return &AWSObjectStorageService{client: client, bucketName: bucketName}, nil
 }
 

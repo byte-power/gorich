@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/apache/pulsar-client-go/pulsar"
+
 	"github.com/byte-power/gorich/cloud"
 )
 
@@ -34,7 +35,15 @@ func (option TencentCloudQueueOption) GetSecretKey() string {
 	return option.Token
 }
 
+func (option TencentCloudQueueOption) GetAssumeRoleArn() string {
+	return ""
+}
+
 func (option TencentCloudQueueOption) GetRegion() string {
+	return ""
+}
+
+func (option TencentCloudQueueOption) GetAssumeRegion() string {
 	return ""
 }
 
