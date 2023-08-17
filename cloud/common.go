@@ -15,12 +15,14 @@ type Provider string
 const (
 	AWSProvider          Provider = "aws"
 	TencentCloudProvider Provider = "tencentcloud"
+	BaseRedisProvider    Provider = "base_redis"
 )
 
 var (
-	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s and %s", AWSProvider, TencentCloudProvider)
+	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s、%s and %s", AWSProvider, TencentCloudProvider, BaseRedisProvider)
 	ErrProviderNotTencentCloud  = errors.New("provider is not tencentcloud")
 	ErrProviderNotAWS           = errors.New("provider is not aws")
+	ErrProviderNotBaseRedis     = errors.New("provider is not base redis")
 	ErrEmptySecretID            = errors.New("secret_id is empty")
 	ErrEmptySecretKey           = errors.New("secret_key is empty")
 	ErrEmptyRegion              = errors.New("region is empty")
@@ -35,6 +37,7 @@ type Option interface {
 	GetAssumeRegion() string
 	CheckAWS() error
 	CheckTencentCloud() error
+	CheckBaseRedis() error
 }
 
 type CommonOption struct {
@@ -100,6 +103,13 @@ func (option CommonOption) CheckAWS() error {
 func (option CommonOption) CheckTencentCloud() error {
 	if option.Provider != TencentCloudProvider {
 		return ErrProviderNotTencentCloud
+	}
+	return option.check()
+}
+
+func (option CommonOption) CheckBaseRedis() error {
+	if option.Provider != BaseRedisProvider {
+		return ErrProviderNotBaseRedis
 	}
 	return option.check()
 }
