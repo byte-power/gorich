@@ -19,7 +19,7 @@ const (
 )
 
 var (
-	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s、%s and %s", AWSProvider, TencentCloudProvider, BaseRedisProvider)
+	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s, %s and %s", AWSProvider, TencentCloudProvider, BaseRedisProvider)
 	ErrProviderNotTencentCloud  = errors.New("provider is not tencentcloud")
 	ErrProviderNotAWS           = errors.New("provider is not aws")
 	ErrProviderNotBaseRedis     = errors.New("provider is not base redis")

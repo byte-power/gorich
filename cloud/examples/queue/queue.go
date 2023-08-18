@@ -18,7 +18,7 @@ func main() {
 		Addr:              "localhost:6379",
 		Password:          "",
 		ConsumerGroupName: "save_task_consumer_group",
-		ConsumerName:      "consumer-172.68.36.11",
+		ConsumerName:      "consumer-hfuq3k",
 		Idle:              10,
 	}
 	queue_examples("test_queue_name", optionForBaseRedis)

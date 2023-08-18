@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
@@ -13,8 +12,7 @@ import (
 )
 
 const (
-	DefaultIdle       = 10 * time.Second // 即多长时间后未收到 ACK 的消息被认为是 Pending 状态需要被处理
-	WarningRetryCount = 3                // 超过多少此重试输出警告日志
+	DefaultIdle = 10 * time.Second // 即多长时间后未收到 ACK 的消息被认为是 Pending 状态需要被处理
 )
 
 var (
@@ -125,10 +123,23 @@ func GetBaseRedisQueueService(queueName string, option cloud.Option) (QueueServi
 }
 
 func (service *BaseRedisQueueService) CreateProducer() (Producer, error) {
+
 	return service, nil
 }
 
+func (service *BaseRedisQueueService) IfCreateMkStream(ctx context.Context) error {
+	err := service.client.XGroupCreateMkStream(ctx, service.queueName, service.consumerGroup, "0").Err()
+	if err != nil && errors.Is(err, redis.Nil) {
+		return nil
+	}
+	return err
+}
+
 func (service *BaseRedisQueueService) CreateConsumer() (Consumer, error) {
+	err := service.IfCreateMkStream(context.Background())
+	if err != nil {
+		return nil, err
+	}
 	return service, nil
 }
 
@@ -136,22 +147,7 @@ func (service *BaseRedisQueueService) Close() error {
 	return service.client.Close()
 }
 
-func (service *BaseRedisQueueService) IfCreateMkStream(ctx context.Context) error {
-	exists, err := service.client.Exists(ctx, service.queueName).Result()
-	if err != nil {
-		log.Printf("Error checking stream %s exist: %v", service.queueName, err)
-		return err
-	}
-	if exists == 1 { // 存在
-		return nil
-	}
-	return service.client.XGroupCreateMkStream(ctx, service.queueName, service.consumerGroup, "0").Err()
-}
-
 func (service *BaseRedisQueueService) SendMessage(ctx context.Context, body string) error {
-	if err := service.IfCreateMkStream(ctx); err != nil {
-		return err
-	}
 	err := service.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: service.queueName,
 		Values: map[string]interface{}{"_body": body},
@@ -177,7 +173,10 @@ func (service *BaseRedisQueueService) ReceiveMessages(ctx context.Context, maxCo
 	if len(pendingMessages) > 0 {
 		messages := make([]Message, 0, len(pendingMessages))
 		for _, xMsg := range pendingMessages {
-			newMsg := DeepCopyXMessage(xMsg)
+			newMsg, err := DeepCopyXMessage(xMsg)
+			if err != nil {
+				return nil, err
+			}
 			messages = append(messages, &BaseRedisQueueMessage{message: &newMsg})
 		}
 		return messages, nil
@@ -198,7 +197,10 @@ func (service *BaseRedisQueueService) ReceiveMessages(ctx context.Context, maxCo
 	messages := make([]Message, 0)
 	for _, xStream := range xStreams {
 		for _, xMsg := range xStream.Messages {
-			newMsg := DeepCopyXMessage(xMsg)
+			newMsg, err := DeepCopyXMessage(xMsg)
+			if err != nil {
+				return nil, err
+			}
 			messages = append(messages, &BaseRedisQueueMessage{message: &newMsg})
 		}
 	}
@@ -231,9 +233,6 @@ func (service *BaseRedisQueueService) getPendingMessages(ctx context.Context, st
 
 	pendingIds := make([]string, 0)
 	for _, v := range pendingResults {
-		if v.RetryCount >= WarningRetryCount {
-			log.Printf("warning, message %s retry %d times\n", v.ID, v.RetryCount)
-		}
 		pendingIds = append(pendingIds, v.ID)
 	}
 	if len(pendingIds) == 0 {
@@ -248,6 +247,9 @@ func (service *BaseRedisQueueService) getPendingMessages(ctx context.Context, st
 		MinIdle:  service.getIdle(),
 		Messages: pendingIds,
 	}).Result()
+	if err != nil {
+		return []redis.XMessage{}, err
+	}
 
 	return xMessages, nil
 }
@@ -262,15 +264,15 @@ func (service *BaseRedisQueueService) AckMessage(ctx context.Context, message Me
 	return service.client.XAck(ctx, queueName, consumerGroup, ackIds...).Err()
 }
 
-func DeepCopyXMessage(m redis.XMessage) redis.XMessage {
+func DeepCopyXMessage(m redis.XMessage) (redis.XMessage, error) {
 	b, err := json.Marshal(m)
 	if err != nil {
-		panic(err)
+		return redis.XMessage{}, err
 	}
 	var c redis.XMessage
 	err = json.Unmarshal(b, &c)
 	if err != nil {
-		panic(err)
+		return redis.XMessage{}, err
 	}
-	return c
+	return c, nil
 }
