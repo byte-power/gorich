@@ -108,10 +108,7 @@ func (option CommonOption) CheckTencentCloud() error {
 }
 
 func (option CommonOption) CheckBaseRedis() error {
-	if option.Provider != BaseRedisProvider {
-		return ErrProviderNotBaseRedis
-	}
-	return option.check()
+	return ErrProviderNotBaseRedis
 }
 
 // AwsNewSession

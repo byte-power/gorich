@@ -23,22 +23,22 @@ func main() {
 	}
 	queue_examples("test_queue_name", optionForBaseRedis)
 
-	//optionForTencentCloud := queue.TencentCloudQueueOption{
-	//	Token: "access_jwt_token_xxx",
-	//	URL:   "http://pulsar-xxxxxxxxx.tdmq.ap-gz.public.tencenttdmq.com:8080",
-	//}
-	//topicName := "pulsar-xxxxxx/namespace_name/topic_name"
-	//subscriptionName := "subscription_name"
-	//topicSub := queue.GenerateTopicAndSubName(topicName, subscriptionName)
-	//queue_examples(topicSub, optionForTencentCloud)
-	//
-	//optionForAWS := cloud.CommonOption{
-	//	Provider:  cloud.AWSProvider,
-	//	SecretID:  "aws_secret_id_xxxx",
-	//	SecretKey: "aws_secret_key_xxxx",
-	//	Region:    "aws_region_xxx",
-	//}
-	//queue_examples("aws_queue_name", optionForAWS)
+	optionForTencentCloud := queue.TencentCloudQueueOption{
+		Token: "access_jwt_token_xxx",
+		URL:   "http://pulsar-xxxxxxxxx.tdmq.ap-gz.public.tencenttdmq.com:8080",
+	}
+	topicName := "pulsar-xxxxxx/namespace_name/topic_name"
+	subscriptionName := "subscription_name"
+	topicSub := queue.GenerateTopicAndSubName(topicName, subscriptionName)
+	queue_examples(topicSub, optionForTencentCloud)
+
+	optionForAWS := cloud.CommonOption{
+		Provider:  cloud.AWSProvider,
+		SecretID:  "aws_secret_id_xxxx",
+		SecretKey: "aws_secret_key_xxxx",
+		Region:    "aws_region_xxx",
+	}
+	queue_examples("aws_queue_name", optionForAWS)
 }
 
 func queue_examples(queueOrTopicName string, option cloud.Option) {
