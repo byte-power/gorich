@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/byte-power/gorich/utils"
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
@@ -94,8 +95,6 @@ type BaseRedisQueueService struct {
 	queueName     string
 	consumerGroup string
 	idle          int
-
-	consumerSerial int
 }
 
 var ErrBaseRedisQueueNameEmpty = errors.New("base-redis queue name is empty")
@@ -134,10 +133,9 @@ func (service *BaseRedisQueueService) CreateConsumer() (Consumer, error) {
 		client:   service.client,
 		stream:   service.queueName,
 		group:    service.consumerGroup,
-		consumer: fmt.Sprintf("consumer-%d", service.consumerSerial),
+		consumer: fmt.Sprintf("consumer-%s", utils.RandomString(6)),
 		idle:     service.idle,
 	}
-	service.consumerSerial += 1
 	return consumer, nil
 }
 
