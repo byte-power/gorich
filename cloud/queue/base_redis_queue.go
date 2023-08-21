@@ -17,13 +17,16 @@ const (
 )
 
 var (
-	ErrBaseRedisQueueServiceAddrEmpty          = errors.New("addr for base-redis queue service is empty")
-	ErrBaseRedisQueueServiceConsumerGroupEmpty = errors.New("consumer group for base-redis queue service is empty")
+	ErrBaseRedisQueueClientEmpty        = errors.New("base-redis queue client is empty")
+	ErrBaseRedisQueueConsumerGroupEmpty = errors.New("consumer group for base-redis queue service is empty")
 )
 
+type RedisService interface {
+	Cmdable() redis.Cmdable
+}
+
 type BaseRedisQueueOption struct {
-	Addr              string
-	Password          string
+	Client            RedisService
 	ConsumerGroupName string
 	Idle              int
 }
@@ -37,7 +40,7 @@ func (option BaseRedisQueueOption) GetSecretID() string {
 }
 
 func (option BaseRedisQueueOption) GetSecretKey() string {
-	return option.Password
+	return ""
 }
 
 func (option BaseRedisQueueOption) GetAssumeRoleArn() string {
@@ -65,11 +68,11 @@ func (option BaseRedisQueueOption) CheckBaseRedis() error {
 }
 
 func (option BaseRedisQueueOption) check() error {
-	if option.Addr == "" {
-		return ErrBaseRedisQueueServiceAddrEmpty
+	if option.Client == nil {
+		return ErrBaseRedisQueueClientEmpty
 	}
 	if option.ConsumerGroupName == "" {
-		return ErrBaseRedisQueueServiceConsumerGroupEmpty
+		return ErrBaseRedisQueueConsumerGroupEmpty
 	}
 	return nil
 }
@@ -87,7 +90,7 @@ func (message *BaseRedisQueueMessage) Body() string {
 }
 
 type BaseRedisQueueService struct {
-	client        *redis.Client
+	client        RedisService
 	queueName     string
 	consumerGroup string
 	idle          int
@@ -108,11 +111,10 @@ func GetBaseRedisQueueService(queueName string, option cloud.Option) (QueueServi
 	if !ok {
 		return nil, fmt.Errorf("parameter option %+v should be BaseRedisQueueOption", option)
 	}
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     queueOption.Addr,
-		Password: queueOption.Password,
-	})
-	return &BaseRedisQueueService{client: rdb, queueName: queueName,
+
+	return &BaseRedisQueueService{
+		client:        queueOption.Client,
+		queueName:     queueName,
 		consumerGroup: queueOption.ConsumerGroupName,
 		idle:          queueOption.Idle,
 	}, nil
@@ -123,7 +125,7 @@ func (service *BaseRedisQueueService) CreateProducer() (Producer, error) {
 }
 
 func (service *BaseRedisQueueService) IfCreateMkStream(ctx context.Context) error {
-	return service.client.XGroupCreateMkStream(ctx, service.queueName, service.consumerGroup, "0").Err()
+	return service.client.Cmdable().XGroupCreateMkStream(ctx, service.queueName, service.consumerGroup, "0").Err()
 }
 
 func (service *BaseRedisQueueService) CreateConsumer() (Consumer, error) {
@@ -140,11 +142,11 @@ func (service *BaseRedisQueueService) CreateConsumer() (Consumer, error) {
 }
 
 func (service *BaseRedisQueueService) Close() error {
-	return service.client.Close()
+	return nil
 }
 
 func (service *BaseRedisQueueService) SendMessage(ctx context.Context, body string) error {
-	err := service.client.XAdd(ctx, &redis.XAddArgs{
+	err := service.client.Cmdable().XAdd(ctx, &redis.XAddArgs{
 		Stream: service.queueName,
 		Values: map[string]interface{}{"_body_key": body},
 	}).Err()
@@ -155,7 +157,7 @@ func (service *BaseRedisQueueService) SendMessage(ctx context.Context, body stri
 }
 
 type BaseRedisQueueConsumer struct {
-	client   *redis.Client
+	client   RedisService
 	stream   string
 	group    string
 	consumer string
@@ -179,7 +181,7 @@ func (c *BaseRedisQueueConsumer) ReceiveMessages(ctx context.Context, maxCount i
 	}
 
 	// 从 Stream 获取消息
-	xStreams, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+	xStreams, err := c.client.Cmdable().XReadGroup(ctx, &redis.XReadGroupArgs{
 		Streams:  []string{c.stream, ">"},
 		Group:    c.group,
 		Consumer: c.consumer,
@@ -243,7 +245,7 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 	}
 
 	// 查询消息
-	pendingResults, err := c.client.XPendingExt(ctx, xPendingExtArgs).Result()
+	pendingResults, err := c.client.Cmdable().XPendingExt(ctx, xPendingExtArgs).Result()
 	if err != nil {
 		return []redis.XMessage{}, err
 	}
@@ -268,7 +270,7 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 	}
 
 	// 获取消息
-	xMessages, err := c.client.XClaim(ctx, xClaimArgs).Result()
+	xMessages, err := c.client.Cmdable().XClaim(ctx, xClaimArgs).Result()
 	if err != nil {
 		return []redis.XMessage{}, err
 	}
@@ -283,11 +285,11 @@ func (c *BaseRedisQueueConsumer) AckMessage(ctx context.Context, message Message
 	}
 	ackIds := []string{redisMessage.message.ID}
 	queueName, consumerGroup := c.stream, c.group
-	return c.client.XAck(ctx, queueName, consumerGroup, ackIds...).Err()
+	return c.client.Cmdable().XAck(ctx, queueName, consumerGroup, ackIds...).Err()
 }
 
 func (c *BaseRedisQueueConsumer) Close() error {
-	return c.client.XGroupDelConsumer(context.Background(),
+	return c.client.Cmdable().XGroupDelConsumer(context.Background(),
 		c.stream,
 		c.group,
 		c.consumer,
