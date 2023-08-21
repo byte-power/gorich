@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis/v8"
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
@@ -56,8 +56,6 @@ func main() {
 	}
 
 	optionForBaseRedis := queue.BaseRedisQueueOption{
-		//Addr:              "localhost:6379",
-		//Password:          "",
 		Client:            client,
 		ConsumerGroupName: "save_task_consumer_group",
 		Idle:              10,

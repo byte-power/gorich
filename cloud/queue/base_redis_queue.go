@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
-	"github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis/v8"
 )
 
 const (
@@ -237,8 +237,8 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 		Group:  c.group,
 		Start:  "-",
 		End:    "+",
-		Idle:   idle, // v8 版本 go-redis 库不支持这个参数
-		Count:  int64(count),
+		//Idle:   idle, // v8 版本 go-redis 库不支持这个参数
+		Count: int64(count),
 	}
 	if withConsumer {
 		xPendingExtArgs.Consumer = c.consumer
@@ -251,8 +251,10 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 	}
 
 	pendingIds := make([]string, 0)
-	for _, v := range pendingResults {
-		pendingIds = append(pendingIds, v.ID)
+	for _, item := range pendingResults {
+		if item.Idle >= idle { // v8 版本 go-redis 不支持在查询时通过 idle 过滤，此处程序过滤
+			pendingIds = append(pendingIds, item.ID)
+		}
 	}
 	if len(pendingIds) == 0 {
 		return []redis.XMessage{}, nil
