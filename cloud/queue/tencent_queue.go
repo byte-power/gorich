@@ -55,8 +55,12 @@ func (option TencentCloudQueueOption) CheckTencentCloud() error {
 	return option.check()
 }
 
-func (option TencentCloudQueueOption) CheckBaseRedis() error {
-	return cloud.ErrProviderNotBaseRedis
+func (option TencentCloudQueueOption) CheckStandaloneRedis() error {
+	return cloud.ErrProviderNotStandaloneRedis
+}
+
+func (option TencentCloudQueueOption) CheckClusterRedis() error {
+	return cloud.ErrProviderNotClusterRedis
 }
 
 func (option TencentCloudQueueOption) check() error {

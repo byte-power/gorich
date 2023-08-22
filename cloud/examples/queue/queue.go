@@ -3,44 +3,27 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
 	"github.com/byte-power/gorich/cloud/queue"
 )
 
-type RedisClient struct {
-	client *redis.Client
-}
-
-func (r *RedisClient) Cmdable() redis.Cmdable {
-	return r.client
-}
-
-type RedisClusterClient struct {
-	client *redis.ClusterClient
-}
-
-func (r *RedisClusterClient) Cmdable() redis.Cmdable {
-	return r.client
-}
-
+// Configure Addr/Addrs, Password to run standalone/cluster redis example.
 // Configure token, url, topic_name and subscription_name to run tencentcloud example.
 // Configure secret_id, secret_key, region, and queue_name to run this example.
 func main() {
 
 	// Redis 单节点
-	//rdb := redis.NewClient(&redis.Options{
-	//	Addr:     "localhost:6379",
-	//	Password: "",
-	//})
-	//client := &RedisClient{
-	//	client: rdb,
+	//optionForBaseRedis := queue.StandaloneRedisQueueOption{
+	//	Addr:              "localhost:6379",
+	//	Password:          "",
+	//	ConsumerGroup: "save_task_consumer_group",
+	//	Idle:              10,
 	//}
 
 	// Redis 集群
-	rdb := redis.NewClusterClient(&redis.ClusterOptions{
+	optionForBaseRedis := queue.ClusterRedisQueueOption{
 		Addrs: []string{
 			"localhost:7000",
 			"localhost:7001",
@@ -49,17 +32,11 @@ func main() {
 			"localhost:7004",
 			"localhost:7005",
 		},
-		Password: "",
-	})
-	client := &RedisClusterClient{
-		client: rdb,
+		Password:      "",
+		ConsumerGroup: "save_task_consumer_group",
+		Idle:          10,
 	}
 
-	optionForBaseRedis := queue.BaseRedisQueueOption{
-		Client:            client,
-		ConsumerGroupName: "save_task_consumer_group",
-		Idle:              10,
-	}
 	queue_examples("test_queue_name", optionForBaseRedis)
 
 	optionForTencentCloud := queue.TencentCloudQueueOption{

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -18,64 +18,12 @@ const (
 )
 
 var (
-	ErrBaseRedisQueueClientEmpty        = errors.New("base-redis queue client is empty")
-	ErrBaseRedisQueueConsumerGroupEmpty = errors.New("consumer group for base-redis queue service is empty")
+	ErrBaseRedisQueueNameEmpty    = errors.New("standalone-redis queue name is empty")
+	ErrClusterRedisQueueNameEmpty = errors.New("cluster-redis queue name is empty")
 )
 
-type RedisService interface {
+type redisService interface {
 	Cmdable() redis.Cmdable
-}
-
-type BaseRedisQueueOption struct {
-	Client            RedisService
-	ConsumerGroupName string
-	Idle              int
-}
-
-func (option BaseRedisQueueOption) GetProvider() cloud.Provider {
-	return cloud.BaseRedisProvider
-}
-
-func (option BaseRedisQueueOption) GetSecretID() string {
-	return ""
-}
-
-func (option BaseRedisQueueOption) GetSecretKey() string {
-	return ""
-}
-
-func (option BaseRedisQueueOption) GetAssumeRoleArn() string {
-	return ""
-}
-
-func (option BaseRedisQueueOption) GetRegion() string {
-	return ""
-}
-
-func (option BaseRedisQueueOption) GetAssumeRegion() string {
-	return ""
-}
-
-func (option BaseRedisQueueOption) CheckAWS() error {
-	return cloud.ErrProviderNotAWS
-}
-
-func (option BaseRedisQueueOption) CheckTencentCloud() error {
-	return cloud.ErrProviderNotTencentCloud
-}
-
-func (option BaseRedisQueueOption) CheckBaseRedis() error {
-	return option.check()
-}
-
-func (option BaseRedisQueueOption) check() error {
-	if option.Client == nil {
-		return ErrBaseRedisQueueClientEmpty
-	}
-	if option.ConsumerGroupName == "" {
-		return ErrBaseRedisQueueConsumerGroupEmpty
-	}
-	return nil
 }
 
 type BaseRedisQueueMessage struct {
@@ -91,31 +39,68 @@ func (message *BaseRedisQueueMessage) Body() string {
 }
 
 type BaseRedisQueueService struct {
-	client        RedisService
+	client        redisService
 	queueName     string
 	consumerGroup string
 	idle          int
+	globalIdle    int
 }
 
-var ErrBaseRedisQueueNameEmpty = errors.New("base-redis queue name is empty")
-
-func GetBaseRedisQueueService(queueName string, option cloud.Option) (QueueService, error) {
+func GetStandaloneRedisQueueService(queueName string, option cloud.Option) (QueueService, error) {
 	if queueName == "" {
 		return nil, ErrBaseRedisQueueNameEmpty
 	}
-	if err := option.CheckBaseRedis(); err != nil {
+	if err := option.CheckStandaloneRedis(); err != nil {
 		return nil, err
 	}
-	queueOption, ok := option.(BaseRedisQueueOption)
+	queueOption, ok := option.(StandaloneRedisQueueOption)
 	if !ok {
 		return nil, fmt.Errorf("parameter option %+v should be BaseRedisQueueOption", option)
 	}
 
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     queueOption.Addr,
+		Password: queueOption.Password,
+	})
+	client := &RedisClient{
+		client: rdb,
+	}
+
 	return &BaseRedisQueueService{
-		client:        queueOption.Client,
+		client:        client,
 		queueName:     queueName,
-		consumerGroup: queueOption.ConsumerGroupName,
+		consumerGroup: queueOption.ConsumerGroup,
 		idle:          queueOption.Idle,
+		globalIdle:    queueOption.GlobalIdle,
+	}, nil
+}
+
+func GetClusterRedisQueueService(queueName string, option cloud.Option) (QueueService, error) {
+	if queueName == "" {
+		return nil, ErrClusterRedisQueueNameEmpty
+	}
+	if err := option.CheckClusterRedis(); err != nil {
+		return nil, err
+	}
+	queueOption, ok := option.(ClusterRedisQueueOption)
+	if !ok {
+		return nil, fmt.Errorf("parameter option %+v should be ClusterRedisQueueOption", option)
+	}
+
+	rdb := redis.NewClusterClient(&redis.ClusterOptions{
+		Addrs:    queueOption.Addrs,
+		Password: queueOption.Password,
+	})
+	client := &RedisClusterClient{
+		client: rdb,
+	}
+
+	return &BaseRedisQueueService{
+		client:        client,
+		queueName:     queueName,
+		consumerGroup: queueOption.ConsumerGroup,
+		idle:          queueOption.Idle,
+		globalIdle:    queueOption.GlobalIdle,
 	}, nil
 }
 
@@ -130,11 +115,12 @@ func (service *BaseRedisQueueService) IfCreateMkStream(ctx context.Context) erro
 func (service *BaseRedisQueueService) CreateConsumer() (Consumer, error) {
 	_ = service.IfCreateMkStream(context.Background()) // 重复创建 XGroup 会报错，忽略
 	consumer := &BaseRedisQueueConsumer{
-		client:   service.client,
-		stream:   service.queueName,
-		group:    service.consumerGroup,
-		consumer: fmt.Sprintf("consumer-%s", utils.RandomString(6)),
-		idle:     service.idle,
+		client:     service.client,
+		stream:     service.queueName,
+		group:      service.consumerGroup,
+		consumer:   fmt.Sprintf("consumer-%s", utils.RandomString(6)),
+		idle:       service.idle,
+		globalIdle: service.globalIdle,
 	}
 	return consumer, nil
 }
@@ -155,14 +141,19 @@ func (service *BaseRedisQueueService) SendMessage(ctx context.Context, body stri
 }
 
 type BaseRedisQueueConsumer struct {
-	client   RedisService
-	stream   string
-	group    string
-	consumer string
-	idle     int
+	client     redisService
+	stream     string
+	group      string
+	consumer   string
+	idle       int
+	globalIdle int
 }
 
-// ReceiveMessages 首先获取 Pending 状态超过 X 秒的消息，未获取到则到 Stream 队列获取
+// ReceiveMessages 获取待消费消息
+//
+//	首先获取当前消费者 Pending 状态超过 X 秒的消息
+//	而后获取全局所有的 Pending 状态超过 Y 秒的消息
+//	最后获取 Stream 队列的消息
 func (c *BaseRedisQueueConsumer) ReceiveMessages(ctx context.Context, maxCount int) ([]Message, error) {
 
 	// 先获取当前消费者 Pending 消息
@@ -171,7 +162,20 @@ func (c *BaseRedisQueueConsumer) ReceiveMessages(ctx context.Context, maxCount i
 		return nil, err
 	}
 	if len(pendingMessages) > 0 {
-		messages, err := XMessagesToMessages(pendingMessages)
+		messages, err := xMessagesToMessages(pendingMessages)
+		if err != nil {
+			return nil, err
+		}
+		return messages, nil
+	}
+
+	// 从全局 Pending 获取超时未处理消息
+	pendingMessages, err = c.getPendingMessages(ctx, false, maxCount, c.getGlobalIdle())
+	if err != nil {
+		return nil, err
+	}
+	if len(pendingMessages) > 0 {
+		messages, err := xMessagesToMessages(pendingMessages)
 		if err != nil {
 			return nil, err
 		}
@@ -192,31 +196,14 @@ func (c *BaseRedisQueueConsumer) ReceiveMessages(ctx context.Context, maxCount i
 	messages := make([]Message, 0)
 	for _, xStream := range xStreams {
 		for _, xMsg := range xStream.Messages {
-			newMsg, err := DeepCopyXMessage(xMsg)
+			newMsg, err := deepCopyXMessage(xMsg)
 			if err != nil {
 				return nil, err
 			}
 			messages = append(messages, &BaseRedisQueueMessage{message: &newMsg})
 		}
 	}
-	if len(messages) != 0 {
-		return messages, nil
-	}
-
-	// 从全局 Pending 获取超时未处理消息
-	pendingMessages, err = c.getPendingMessages(ctx, false, maxCount, DefaultGlobalIdle)
-	if err != nil {
-		return nil, err
-	}
-	if len(pendingMessages) > 0 {
-		messages, err = XMessagesToMessages(pendingMessages)
-		if err != nil {
-			return nil, err
-		}
-		return messages, nil
-	}
-
-	return []Message{}, nil
+	return messages, nil
 }
 
 func (c *BaseRedisQueueConsumer) getIdle() time.Duration {
@@ -224,6 +211,13 @@ func (c *BaseRedisQueueConsumer) getIdle() time.Duration {
 		return DefaultIdle
 	}
 	return time.Duration(c.idle) * time.Second
+}
+
+func (c *BaseRedisQueueConsumer) getGlobalIdle() time.Duration {
+	if c.globalIdle <= 0 {
+		return DefaultGlobalIdle
+	}
+	return time.Duration(c.globalIdle) * time.Second
 }
 
 // 获取 Pending 消息
@@ -235,8 +229,8 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 		Group:  c.group,
 		Start:  "-",
 		End:    "+",
-		//Idle:   idle, // v8 版本 go-redis 库不支持这个参数
-		Count: int64(count),
+		Idle:   idle,
+		Count:  int64(count),
 	}
 	if withConsumer {
 		xPendingExtArgs.Consumer = c.consumer
@@ -250,9 +244,7 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 
 	pendingIds := make([]string, 0)
 	for _, item := range pendingResults {
-		if item.Idle >= idle { // v8 版本 go-redis 不支持在查询时通过 idle 过滤，此处程序过滤
-			pendingIds = append(pendingIds, item.ID)
-		}
+		pendingIds = append(pendingIds, item.ID)
 	}
 	if len(pendingIds) == 0 {
 		return []redis.XMessage{}, nil
@@ -296,7 +288,7 @@ func (c *BaseRedisQueueConsumer) Close() error {
 	).Err()
 }
 
-func DeepCopyXMessage(m redis.XMessage) (redis.XMessage, error) {
+func deepCopyXMessage(m redis.XMessage) (redis.XMessage, error) {
 	b, err := json.Marshal(m)
 	if err != nil {
 		return redis.XMessage{}, err
@@ -309,10 +301,10 @@ func DeepCopyXMessage(m redis.XMessage) (redis.XMessage, error) {
 	return c, nil
 }
 
-func XMessagesToMessages(xMessages []redis.XMessage) ([]Message, error) {
+func xMessagesToMessages(xMessages []redis.XMessage) ([]Message, error) {
 	messages := make([]Message, 0, len(xMessages))
 	for _, xMsg := range xMessages {
-		newMsg, err := DeepCopyXMessage(xMsg)
+		newMsg, err := deepCopyXMessage(xMsg)
 		if err != nil {
 			return nil, err
 		}

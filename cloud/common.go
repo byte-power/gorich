@@ -13,19 +13,21 @@ import (
 type Provider string
 
 const (
-	AWSProvider          Provider = "aws"
-	TencentCloudProvider Provider = "tencentcloud"
-	BaseRedisProvider    Provider = "base_redis"
+	AWSProvider             Provider = "aws"
+	TencentCloudProvider    Provider = "tencentcloud"
+	StandaloneRedisProvider Provider = "standalone_redis"
+	ClusterRedisProvider    Provider = "cluster_redis"
 )
 
 var (
-	ErrUnsupportedCloudProvider = fmt.Errorf("unsupported provider, only support %s, %s and %s", AWSProvider, TencentCloudProvider, BaseRedisProvider)
-	ErrProviderNotTencentCloud  = errors.New("provider is not tencentcloud")
-	ErrProviderNotAWS           = errors.New("provider is not aws")
-	ErrProviderNotBaseRedis     = errors.New("provider is not base redis")
-	ErrEmptySecretID            = errors.New("secret_id is empty")
-	ErrEmptySecretKey           = errors.New("secret_key is empty")
-	ErrEmptyRegion              = errors.New("region is empty")
+	ErrUnsupportedCloudProvider   = fmt.Errorf("unsupported provider, only support %s, %s and %s", AWSProvider, TencentCloudProvider, StandaloneRedisProvider)
+	ErrProviderNotTencentCloud    = errors.New("provider is not tencentcloud")
+	ErrProviderNotAWS             = errors.New("provider is not aws")
+	ErrProviderNotStandaloneRedis = errors.New("provider is not standalone redis")
+	ErrProviderNotClusterRedis    = errors.New("provider is not cluster redis")
+	ErrEmptySecretID              = errors.New("secret_id is empty")
+	ErrEmptySecretKey             = errors.New("secret_key is empty")
+	ErrEmptyRegion                = errors.New("region is empty")
 )
 
 type Option interface {
@@ -37,7 +39,8 @@ type Option interface {
 	GetAssumeRegion() string
 	CheckAWS() error
 	CheckTencentCloud() error
-	CheckBaseRedis() error
+	CheckStandaloneRedis() error
+	CheckClusterRedis() error
 }
 
 type CommonOption struct {
@@ -107,8 +110,12 @@ func (option CommonOption) CheckTencentCloud() error {
 	return option.check()
 }
 
-func (option CommonOption) CheckBaseRedis() error {
-	return ErrProviderNotBaseRedis
+func (option CommonOption) CheckStandaloneRedis() error {
+	return ErrProviderNotStandaloneRedis
+}
+
+func (option CommonOption) CheckClusterRedis() error {
+	return ErrProviderNotClusterRedis
 }
 
 // AwsNewSession
