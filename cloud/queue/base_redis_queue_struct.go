@@ -3,7 +3,7 @@ package queue
 import (
 	"errors"
 	"github.com/byte-power/gorich/cloud"
-	"github.com/redis/go-redis/v9"
+	"time"
 )
 
 var (
@@ -13,27 +13,22 @@ var (
 	ErrClusterRedisQueueConsumerGroupEmpty    = errors.New("cluster-redis queue consumer group name is empty")
 )
 
-type RedisClient struct {
-	client *redis.Client
-}
-
-func (r *RedisClient) Cmdable() redis.Cmdable {
-	return r.client
-}
-
-type RedisClusterClient struct {
-	client *redis.ClusterClient
-}
-
-func (r *RedisClusterClient) Cmdable() redis.Cmdable {
-	return r.client
-}
-
 // StandaloneRedisQueueOption 用于 Redis Standalone 实例
 
 type StandaloneRedisQueueOption struct {
-	Addr          string
-	Password      string
+	Addr            string
+	Password        string
+	DB              *int
+	MaxRetries      *int
+	DialTimeout     *time.Duration
+	ReadTimeout     *time.Duration
+	WriteTimeout    *time.Duration
+	MinIdleConns    *int
+	MaxIdleConns    *int
+	ConnMaxIdleTime *time.Duration
+	ConnMaxLifetime *time.Duration
+
+	// queue
 	ConsumerGroup string
 	Idle          int
 	GlobalIdle    int
@@ -92,8 +87,19 @@ func (option StandaloneRedisQueueOption) check() error {
 // ClusterRedisQueueOption 用于 Redis Cluster 集群
 
 type ClusterRedisQueueOption struct {
-	Addrs         []string
-	Password      string
+	Addrs           []string
+	Password        string
+	DB              *int
+	MaxRetries      *int
+	DialTimeout     *time.Duration
+	ReadTimeout     *time.Duration
+	WriteTimeout    *time.Duration
+	MinIdleConns    *int
+	MaxIdleConns    *int
+	ConnMaxIdleTime *time.Duration
+	ConnMaxLifetime *time.Duration
+
+	// queue
 	ConsumerGroup string
 	Idle          int
 	GlobalIdle    int

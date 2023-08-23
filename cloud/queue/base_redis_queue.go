@@ -22,10 +22,6 @@ var (
 	ErrClusterRedisQueueNameEmpty = errors.New("cluster-redis queue name is empty")
 )
 
-type redisService interface {
-	Cmdable() redis.Cmdable
-}
-
 type BaseRedisQueueMessage struct {
 	message *redis.XMessage
 }
@@ -39,7 +35,7 @@ func (message *BaseRedisQueueMessage) Body() string {
 }
 
 type BaseRedisQueueService struct {
-	client        redisService
+	client        redis.Cmdable
 	queueName     string
 	consumerGroup string
 	idle          int
@@ -58,13 +54,12 @@ func GetStandaloneRedisQueueService(queueName string, option cloud.Option) (Queu
 		return nil, fmt.Errorf("parameter option %+v should be BaseRedisQueueOption", option)
 	}
 
-	rdb := redis.NewClient(&redis.Options{
+	redisOptions := &redis.Options{
 		Addr:     queueOption.Addr,
 		Password: queueOption.Password,
-	})
-	client := &RedisClient{
-		client: rdb,
 	}
+	applyCustomOptions(redisOptions, queueOption)
+	client := redis.NewClient(redisOptions)
 
 	return &BaseRedisQueueService{
 		client:        client,
@@ -87,13 +82,12 @@ func GetClusterRedisQueueService(queueName string, option cloud.Option) (QueueSe
 		return nil, fmt.Errorf("parameter option %+v should be ClusterRedisQueueOption", option)
 	}
 
-	rdb := redis.NewClusterClient(&redis.ClusterOptions{
+	redisOptions := &redis.ClusterOptions{
 		Addrs:    queueOption.Addrs,
 		Password: queueOption.Password,
-	})
-	client := &RedisClusterClient{
-		client: rdb,
 	}
+	applyCustomClusterOptions(redisOptions, queueOption)
+	client := redis.NewClusterClient(redisOptions)
 
 	return &BaseRedisQueueService{
 		client:        client,
@@ -109,7 +103,7 @@ func (service *BaseRedisQueueService) CreateProducer() (Producer, error) {
 }
 
 func (service *BaseRedisQueueService) IfCreateMkStream(ctx context.Context) error {
-	return service.client.Cmdable().XGroupCreateMkStream(ctx, service.queueName, service.consumerGroup, "0").Err()
+	return service.client.XGroupCreateMkStream(ctx, service.queueName, service.consumerGroup, "0").Err()
 }
 
 func (service *BaseRedisQueueService) CreateConsumer() (Consumer, error) {
@@ -130,7 +124,7 @@ func (service *BaseRedisQueueService) Close() error {
 }
 
 func (service *BaseRedisQueueService) SendMessage(ctx context.Context, body string) error {
-	err := service.client.Cmdable().XAdd(ctx, &redis.XAddArgs{
+	err := service.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: service.queueName,
 		Values: map[string]interface{}{"_body_key": body},
 	}).Err()
@@ -141,7 +135,7 @@ func (service *BaseRedisQueueService) SendMessage(ctx context.Context, body stri
 }
 
 type BaseRedisQueueConsumer struct {
-	client     redisService
+	client     redis.Cmdable
 	stream     string
 	group      string
 	consumer   string
@@ -183,7 +177,7 @@ func (c *BaseRedisQueueConsumer) ReceiveMessages(ctx context.Context, maxCount i
 	}
 
 	// 从 Stream 获取消息
-	xStreams, err := c.client.Cmdable().XReadGroup(ctx, &redis.XReadGroupArgs{
+	xStreams, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Streams:  []string{c.stream, ">"},
 		Group:    c.group,
 		Consumer: c.consumer,
@@ -237,7 +231,7 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 	}
 
 	// 查询消息
-	pendingResults, err := c.client.Cmdable().XPendingExt(ctx, xPendingExtArgs).Result()
+	pendingResults, err := c.client.XPendingExt(ctx, xPendingExtArgs).Result()
 	if err != nil {
 		return []redis.XMessage{}, err
 	}
@@ -262,7 +256,7 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 	}
 
 	// 获取消息
-	xMessages, err := c.client.Cmdable().XClaim(ctx, xClaimArgs).Result()
+	xMessages, err := c.client.XClaim(ctx, xClaimArgs).Result()
 	if err != nil {
 		return []redis.XMessage{}, err
 	}
@@ -277,11 +271,11 @@ func (c *BaseRedisQueueConsumer) AckMessage(ctx context.Context, message Message
 	}
 	ackIds := []string{redisMessage.message.ID}
 	queueName, consumerGroup := c.stream, c.group
-	return c.client.Cmdable().XAck(ctx, queueName, consumerGroup, ackIds...).Err()
+	return c.client.XAck(ctx, queueName, consumerGroup, ackIds...).Err()
 }
 
 func (c *BaseRedisQueueConsumer) Close() error {
-	return c.client.Cmdable().XGroupDelConsumer(context.Background(),
+	return c.client.XGroupDelConsumer(context.Background(),
 		c.stream,
 		c.group,
 		c.consumer,
@@ -311,4 +305,58 @@ func xMessagesToMessages(xMessages []redis.XMessage) ([]Message, error) {
 		messages = append(messages, &BaseRedisQueueMessage{message: &newMsg})
 	}
 	return messages, nil
+}
+
+func applyCustomOptions(redisOptions *redis.Options, queueOption StandaloneRedisQueueOption) {
+	if queueOption.MaxRetries != nil {
+		redisOptions.MaxRetries = *queueOption.MaxRetries
+	}
+	if queueOption.DialTimeout != nil {
+		redisOptions.DialTimeout = *queueOption.DialTimeout
+	}
+	if queueOption.ReadTimeout != nil {
+		redisOptions.ReadTimeout = *queueOption.ReadTimeout
+	}
+	if queueOption.WriteTimeout != nil {
+		redisOptions.WriteTimeout = *queueOption.WriteTimeout
+	}
+	if queueOption.MinIdleConns != nil {
+		redisOptions.MinIdleConns = *queueOption.MinIdleConns
+	}
+	if queueOption.MaxIdleConns != nil {
+		redisOptions.MaxIdleConns = *queueOption.MaxIdleConns
+	}
+	if queueOption.ConnMaxIdleTime != nil {
+		redisOptions.ConnMaxIdleTime = *queueOption.ConnMaxIdleTime
+	}
+	if queueOption.ConnMaxLifetime != nil {
+		redisOptions.ConnMaxLifetime = *queueOption.ConnMaxLifetime
+	}
+}
+
+func applyCustomClusterOptions(redisOptions *redis.ClusterOptions, queueOption ClusterRedisQueueOption) {
+	if queueOption.MaxRetries != nil {
+		redisOptions.MaxRetries = *queueOption.MaxRetries
+	}
+	if queueOption.DialTimeout != nil {
+		redisOptions.DialTimeout = *queueOption.DialTimeout
+	}
+	if queueOption.ReadTimeout != nil {
+		redisOptions.ReadTimeout = *queueOption.ReadTimeout
+	}
+	if queueOption.WriteTimeout != nil {
+		redisOptions.WriteTimeout = *queueOption.WriteTimeout
+	}
+	if queueOption.MinIdleConns != nil {
+		redisOptions.MinIdleConns = *queueOption.MinIdleConns
+	}
+	if queueOption.MaxIdleConns != nil {
+		redisOptions.MaxIdleConns = *queueOption.MaxIdleConns
+	}
+	if queueOption.ConnMaxIdleTime != nil {
+		redisOptions.ConnMaxIdleTime = *queueOption.ConnMaxIdleTime
+	}
+	if queueOption.ConnMaxLifetime != nil {
+		redisOptions.ConnMaxLifetime = *queueOption.ConnMaxLifetime
+	}
 }
