@@ -32,6 +32,10 @@ func GetQueueService(queueOrTopicSubName string, option cloud.Option) (QueueServ
 		return GetTencentCloudQueueService(queueOrTopicSubName, option)
 	} else if option.GetProvider() == cloud.AWSProvider {
 		return GetAWSQueueService(queueOrTopicSubName, option)
+	} else if option.GetProvider() == cloud.StandaloneRedisProvider {
+		return GetStandaloneRedisQueueService(queueOrTopicSubName, option)
+	} else if option.GetProvider() == cloud.ClusterRedisProvider {
+		return GetClusterRedisQueueService(queueOrTopicSubName, option)
 	}
 	return nil, cloud.ErrUnsupportedCloudProvider
 }

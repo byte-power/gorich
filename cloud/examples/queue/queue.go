@@ -9,9 +9,36 @@ import (
 	"github.com/byte-power/gorich/cloud/queue"
 )
 
+// Configure Addr/Addrs, Password to run standalone/cluster redis example.
 // Configure token, url, topic_name and subscription_name to run tencentcloud example.
 // Configure secret_id, secret_key, region, and queue_name to run this example.
 func main() {
+
+	// Redis 单节点
+	//optionForBaseRedis := queue.StandaloneRedisQueueOption{
+	//	Addr:              "localhost:6379",
+	//	Password:          "",
+	//	ConsumerGroup: "save_task_consumer_group",
+	//	Idle:              10,
+	//}
+
+	// Redis 集群
+	optionForBaseRedis := queue.ClusterRedisQueueOption{
+		Addrs: []string{
+			"localhost:7000",
+			"localhost:7001",
+			"localhost:7002",
+			"localhost:7003",
+			"localhost:7004",
+			"localhost:7005",
+		},
+		Password:      "",
+		ConsumerGroup: "save_task_consumer_group",
+		Idle:          10,
+	}
+
+	queue_examples("test_queue_name", optionForBaseRedis)
+
 	optionForTencentCloud := queue.TencentCloudQueueOption{
 		Token: "access_jwt_token_xxx",
 		URL:   "http://pulsar-xxxxxxxxx.tdmq.ap-gz.public.tencenttdmq.com:8080",
