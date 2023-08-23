@@ -311,6 +311,9 @@ func applyCustomOptions(redisOptions *redis.Options, queueOption StandaloneRedis
 	if queueOption.MaxRetries != nil {
 		redisOptions.MaxRetries = *queueOption.MaxRetries
 	}
+	if queueOption.PoolSize != nil {
+		redisOptions.PoolSize = *queueOption.PoolSize
+	}
 	if queueOption.DialTimeout != nil {
 		redisOptions.DialTimeout = *queueOption.DialTimeout
 	}
@@ -337,6 +340,9 @@ func applyCustomOptions(redisOptions *redis.Options, queueOption StandaloneRedis
 func applyCustomClusterOptions(redisOptions *redis.ClusterOptions, queueOption ClusterRedisQueueOption) {
 	if queueOption.MaxRetries != nil {
 		redisOptions.MaxRetries = *queueOption.MaxRetries
+	}
+	if queueOption.PoolSize != nil {
+		redisOptions.PoolSize = *queueOption.PoolSize
 	}
 	if queueOption.DialTimeout != nil {
 		redisOptions.DialTimeout = *queueOption.DialTimeout

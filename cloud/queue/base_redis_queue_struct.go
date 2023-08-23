@@ -20,6 +20,7 @@ type StandaloneRedisQueueOption struct {
 	Password        string
 	DB              *int
 	MaxRetries      *int
+	PoolSize        *int
 	DialTimeout     *time.Duration
 	ReadTimeout     *time.Duration
 	WriteTimeout    *time.Duration
@@ -91,6 +92,7 @@ type ClusterRedisQueueOption struct {
 	Password        string
 	DB              *int
 	MaxRetries      *int
+	PoolSize        *int
 	DialTimeout     *time.Duration
 	ReadTimeout     *time.Duration
 	WriteTimeout    *time.Duration
