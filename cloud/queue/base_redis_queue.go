@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/byte-power/gorich/utils"
+	"github.com/go-redis/redis/v8"
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
-	"github.com/redis/go-redis/v9"
 )
 
 const (
@@ -326,15 +326,6 @@ func applyCustomOptions(redisOptions *redis.Options, queueOption StandaloneRedis
 	if queueOption.MinIdleConns != nil {
 		redisOptions.MinIdleConns = *queueOption.MinIdleConns
 	}
-	if queueOption.MaxIdleConns != nil {
-		redisOptions.MaxIdleConns = *queueOption.MaxIdleConns
-	}
-	if queueOption.ConnMaxIdleTime != nil {
-		redisOptions.ConnMaxIdleTime = *queueOption.ConnMaxIdleTime
-	}
-	if queueOption.ConnMaxLifetime != nil {
-		redisOptions.ConnMaxLifetime = *queueOption.ConnMaxLifetime
-	}
 }
 
 func applyCustomClusterOptions(redisOptions *redis.ClusterOptions, queueOption ClusterRedisQueueOption) {
@@ -355,14 +346,5 @@ func applyCustomClusterOptions(redisOptions *redis.ClusterOptions, queueOption C
 	}
 	if queueOption.MinIdleConns != nil {
 		redisOptions.MinIdleConns = *queueOption.MinIdleConns
-	}
-	if queueOption.MaxIdleConns != nil {
-		redisOptions.MaxIdleConns = *queueOption.MaxIdleConns
-	}
-	if queueOption.ConnMaxIdleTime != nil {
-		redisOptions.ConnMaxIdleTime = *queueOption.ConnMaxIdleTime
-	}
-	if queueOption.ConnMaxLifetime != nil {
-		redisOptions.ConnMaxLifetime = *queueOption.ConnMaxLifetime
 	}
 }
