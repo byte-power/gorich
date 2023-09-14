@@ -223,7 +223,6 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 		Group:  c.group,
 		Start:  "-",
 		End:    "+",
-		Idle:   idle,
 		Count:  int64(count),
 	}
 	if withConsumer {
@@ -238,7 +237,9 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 
 	pendingIds := make([]string, 0)
 	for _, item := range pendingResults {
-		pendingIds = append(pendingIds, item.ID)
+		if item.Idle <= idle {
+			pendingIds = append(pendingIds, item.ID)
+		}
 	}
 	if len(pendingIds) == 0 {
 		return []redis.XMessage{}, nil
