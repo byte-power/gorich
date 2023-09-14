@@ -16,18 +16,15 @@ var (
 // StandaloneRedisQueueOption 用于 Redis Standalone 实例
 
 type StandaloneRedisQueueOption struct {
-	Addr            string
-	Password        string
-	DB              *int
-	MaxRetries      *int
-	PoolSize        *int
-	DialTimeout     *time.Duration
-	ReadTimeout     *time.Duration
-	WriteTimeout    *time.Duration
-	MinIdleConns    *int
-	MaxIdleConns    *int
-	ConnMaxIdleTime *time.Duration
-	ConnMaxLifetime *time.Duration
+	Addr         string
+	Password     string
+	DB           *int
+	MaxRetries   *int
+	PoolSize     *int
+	DialTimeout  *time.Duration
+	ReadTimeout  *time.Duration
+	WriteTimeout *time.Duration
+	MinIdleConns *int
 
 	// queue
 	ConsumerGroup string
