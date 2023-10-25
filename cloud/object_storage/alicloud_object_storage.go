@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+var ossClientMap = make(map[string]*oss.Client)
+
 var (
 	ErrAliCloudStorageServiceCredentialTypeEmpty = errors.New("credential_type for alicloud storage service is empty")
 	ErrAliCloudStorageServiceEndPointEmpty       = errors.New("endpoint for alicloud storage service is empty")
@@ -101,6 +103,11 @@ func GetAliCloudObjectService(bucketName string, option cloud.Option) (ObjectSto
 		return nil, fmt.Errorf("parameter option %+v should be AliCloudStorageOption", option)
 	}
 
+	// one endpoint, one client, return if exist
+	if client, ok := ossClientMap[storageOption.EndPoint]; ok {
+		return &AliCloudObjectStorageService{client: client, bucketName: bucketName}, nil
+	}
+
 	cred, err := NewOidcCredential(storageOption.CredentialType, storageOption.SessionName)
 	if err != nil {
 		return nil, err
@@ -113,6 +120,9 @@ func GetAliCloudObjectService(bucketName string, option cloud.Option) (ObjectSto
 	if err != nil {
 		return nil, err
 	}
+
+	// cache client
+	ossClientMap[storageOption.EndPoint] = client
 	return &AliCloudObjectStorageService{client: client, bucketName: bucketName}, nil
 }
 
