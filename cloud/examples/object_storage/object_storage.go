@@ -27,6 +27,13 @@ func main() {
 		Region:    "aws_region_xxx",
 	}
 	object_storage_examples("aws_bucket_name_xxx", optionForAWS)
+
+	optionForAliOSS := object_storage.AliCloudStorageOption{
+		CredentialType: "oidc_role_arn",
+		EndPoint:       "oss-cn-zhangjiakou.aliyuncs.com",
+		SessionName:    "test-rrsa-oidc-token",
+	}
+	object_storage_examples("my-bucket", optionForAliOSS)
 }
 
 func object_storage_examples(bucketName string, option cloud.Option) {

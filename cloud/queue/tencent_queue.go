@@ -63,6 +63,10 @@ func (option TencentCloudQueueOption) CheckClusterRedis() error {
 	return cloud.ErrProviderNotClusterRedis
 }
 
+func (option TencentCloudQueueOption) CheckAliCloudStorage() error {
+	return cloud.ErrProviderNotAliCloudStorage
+}
+
 func (option TencentCloudQueueOption) check() error {
 	if option.Token == "" {
 		return ErrTencentCloudQueueServiceTokenEmpty
