@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/byte-power/gorich/cloud"
 	"github.com/byte-power/gorich/utils"
@@ -122,7 +123,7 @@ func (service *AliCloudObjectStorageService) ListObjects(ctx context.Context, pr
 	}
 	resp, err := bucket.ListObjectsV2(
 		oss.Prefix(prefix),
-		oss.ContinuationToken(*continueToken),
+		oss.ContinuationToken(tea.StringValue(continueToken)),
 		oss.MaxKeys(maxObjects),
 	)
 	if err != nil {
@@ -171,7 +172,7 @@ func (service *AliCloudObjectStorageService) HeadObject(ctx context.Context, key
 	if err != nil {
 		return Object{}, err
 	}
-	size, err := utils.StringToInt64(oss.HTTPHeaderContentLength)
+	size, err := utils.StringToInt64(metadata.Get(oss.HTTPHeaderContentLength))
 	if err != nil {
 		return Object{}, err
 	}
@@ -221,7 +222,7 @@ func (service *AliCloudObjectStorageService) GetObject(ctx context.Context, key 
 	if err != nil {
 		return Object{}, err
 	}
-	size, err := utils.StringToInt64(oss.HTTPHeaderContentLength)
+	size, err := utils.StringToInt64(metadata.Get(oss.HTTPHeaderContentLength))
 	if err != nil {
 		return Object{}, err
 	}
