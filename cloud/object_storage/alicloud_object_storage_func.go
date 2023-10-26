@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	EnvRoleArn         = "ALIBABA_CLOUD_ROLE_ARN"
-	EnvOidcProviderArn = "ALIBABA_CLOUD_OIDC_PROVIDER_ARN"
-	EnvOidcTokenFile   = "ALIBABA_CLOUD_OIDC_TOKEN_FILE"
+	AliCloudEnvRoleArn         = "ALIBABA_CLOUD_ROLE_ARN"
+	AliCloudEnvOidcProviderArn = "ALIBABA_CLOUD_OIDC_PROVIDER_ARN"
+	AliCloudEnvOidcTokenFile   = "ALIBABA_CLOUD_OIDC_TOKEN_FILE"
 )
 
 type Credentials struct {
@@ -70,9 +70,9 @@ func NewCredential() (credentials.Credential, error) {
 func NewOidcCredential(credentialType string, sessionName string) (credentials.Credential, error) {
 	config := new(credentials.Config).
 		SetType(credentialType).
-		SetRoleArn(os.Getenv(EnvRoleArn)).
-		SetOIDCProviderArn(os.Getenv(EnvOidcProviderArn)).
-		SetOIDCTokenFilePath(os.Getenv(EnvOidcTokenFile)).
+		SetRoleArn(os.Getenv(AliCloudEnvRoleArn)).
+		SetOIDCProviderArn(os.Getenv(AliCloudEnvOidcProviderArn)).
+		SetOIDCTokenFilePath(os.Getenv(AliCloudEnvOidcTokenFile)).
 		SetRoleSessionName(sessionName)
 
 	oidcCredential, err := credentials.NewCredential(config)

@@ -131,11 +131,17 @@ func (service *AliCloudObjectStorageService) ListObjects(ctx context.Context, pr
 	if err != nil {
 		return nil, nil, err
 	}
-	resp, err := bucket.ListObjectsV2(
-		oss.Prefix(prefix),
-		oss.ContinuationToken(tea.StringValue(continueToken)),
-		oss.MaxKeys(maxObjects),
-	)
+	options := make([]oss.Option, 0)
+	if prefix != "" {
+		options = append(options, oss.Prefix(prefix))
+	}
+	if continueToken != nil {
+		options = append(options, oss.ContinuationToken(tea.StringValue(continueToken)))
+	}
+	if maxObjects > 0 {
+		options = append(options, oss.MaxKeys(maxObjects))
+	}
+	resp, err := bucket.ListObjectsV2(options...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -149,11 +155,11 @@ func (service *AliCloudObjectStorageService) ListObjects(ctx context.Context, pr
 		}
 		objects = append(objects, object)
 	}
-	var nextToken string
+	var nextToken *string
 	if resp.IsTruncated {
-		nextToken = resp.NextContinuationToken
+		nextToken = &resp.NextContinuationToken
 	}
-	return objects, &nextToken, nil
+	return objects, nextToken, nil
 }
 
 func (service *AliCloudObjectStorageService) HeadObject(ctx context.Context, key string) (Object, error) {
@@ -258,7 +264,7 @@ func (service *AliCloudObjectStorageService) PutObject(ctx context.Context, key 
 	if err != nil {
 		return err
 	}
-	return bucket.PutObject(key, bytes.NewReader(input.Body))
+	return bucket.PutObject(key, bytes.NewReader(input.Body), oss.ContentType(input.ContentType))
 }
 
 func (service *AliCloudObjectStorageService) DeleteObject(ctx context.Context, key string) error {
