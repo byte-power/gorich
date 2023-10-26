@@ -108,12 +108,12 @@ func GetAliCloudObjectService(bucketName string, option cloud.Option) (ObjectSto
 		return &AliCloudObjectStorageService{client: client, bucketName: bucketName}, nil
 	}
 
-	cred, err := NewOidcCredential(storageOption.CredentialType, storageOption.SessionName)
+	cred, err := newOidcCredential(storageOption.CredentialType, storageOption.SessionName)
 	if err != nil {
 		return nil, err
 	}
 
-	provider := &CredentialsProvider{
+	provider := &aliCloudCredentialsProvider{
 		cred: cred,
 	}
 	client, err := oss.New(storageOption.EndPoint, "", "", oss.SetCredentialsProvider(provider))

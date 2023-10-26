@@ -15,59 +15,59 @@ const (
 	AliCloudEnvOidcTokenFile   = "ALIBABA_CLOUD_OIDC_TOKEN_FILE"
 )
 
-type Credentials struct {
-	AccessKeyId     string
-	AccessKeySecret string
-	SecurityToken   string
+type aliCloudCredentials struct {
+	accessKeyId     string
+	accessKeySecret string
+	securityToken   string
 }
 
-func (c *Credentials) GetAccessKeyID() string {
-	return c.AccessKeyId
+func (c *aliCloudCredentials) GetAccessKeyID() string {
+	return c.accessKeyId
 }
 
-func (c *Credentials) GetAccessKeySecret() string {
-	return c.AccessKeySecret
+func (c *aliCloudCredentials) GetAccessKeySecret() string {
+	return c.accessKeySecret
 }
 
-func (c *Credentials) GetSecurityToken() string {
-	return c.SecurityToken
+func (c *aliCloudCredentials) GetSecurityToken() string {
+	return c.securityToken
 }
 
-type CredentialsProvider struct {
+type aliCloudCredentialsProvider struct {
 	cred credentials.Credential
 }
 
-func (p CredentialsProvider) GetCredentials() oss.Credentials {
+func (p aliCloudCredentialsProvider) GetCredentials() oss.Credentials {
 	id, err := p.cred.GetAccessKeyId()
 	if err != nil {
 		log.Printf("get access key id failed: %+v", err)
-		return &Credentials{}
+		return &aliCloudCredentials{}
 	}
 	secret, err := p.cred.GetAccessKeySecret()
 	if err != nil {
 		log.Printf("get access key secret failed: %+v", err)
-		return &Credentials{}
+		return &aliCloudCredentials{}
 	}
 	token, err := p.cred.GetSecurityToken()
 	if err != nil {
 		log.Printf("get access security token failed: %+v", err)
-		return &Credentials{}
+		return &aliCloudCredentials{}
 	}
-	return &Credentials{
-		AccessKeyId:     tea.StringValue(id),
-		AccessKeySecret: tea.StringValue(secret),
-		SecurityToken:   tea.StringValue(token),
+	return &aliCloudCredentials{
+		accessKeyId:     tea.StringValue(id),
+		accessKeySecret: tea.StringValue(secret),
+		securityToken:   tea.StringValue(token),
 	}
 }
 
-func NewCredential() (credentials.Credential, error) {
+func newCredential() (credentials.Credential, error) {
 	cred, err := credentials.NewCredential(nil)
 	return cred, err
 }
 
-// NewOidcCredential
+// newOidcCredential
 // demo: https://github.com/AliyunContainerService/ack-ram-tool/blob/main/examples/rrsa/oss-go-sdk/main.go
-func NewOidcCredential(credentialType string, sessionName string) (credentials.Credential, error) {
+func newOidcCredential(credentialType string, sessionName string) (credentials.Credential, error) {
 	config := new(credentials.Config).
 		SetType(credentialType).
 		SetRoleArn(os.Getenv(AliCloudEnvRoleArn)).
