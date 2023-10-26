@@ -72,6 +72,10 @@ func (option StandaloneRedisQueueOption) CheckClusterRedis() error {
 	return cloud.ErrProviderNotClusterRedis
 }
 
+func (option StandaloneRedisQueueOption) CheckAliCloudStorage() error {
+	return cloud.ErrProviderNotAliCloudStorage
+}
+
 func (option StandaloneRedisQueueOption) check() error {
 	if option.Addr == "" {
 		return ErrStandaloneRedisQueueAddrEmpty
@@ -142,6 +146,10 @@ func (option ClusterRedisQueueOption) CheckStandaloneRedis() error {
 
 func (option ClusterRedisQueueOption) CheckClusterRedis() error {
 	return option.check()
+}
+
+func (option ClusterRedisQueueOption) CheckAliCloudStorage() error {
+	return cloud.ErrProviderNotAliCloudStorage
 }
 
 func (option ClusterRedisQueueOption) check() error {

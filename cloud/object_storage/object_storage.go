@@ -69,6 +69,8 @@ func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStor
 		return GetTencentCloudObjectService(bucketName, option)
 	} else if option.GetProvider() == cloud.AWSProvider {
 		return GetAWSObjectService(bucketName, option)
+	} else if option.GetProvider() == cloud.AliCloudStorageProvider {
+		return GetAliCloudObjectService(bucketName, option)
 	}
 	return nil, cloud.ErrUnsupportedCloudProvider
 }

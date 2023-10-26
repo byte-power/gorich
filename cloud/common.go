@@ -17,6 +17,7 @@ const (
 	TencentCloudProvider    Provider = "tencentcloud"
 	StandaloneRedisProvider Provider = "standalone_redis"
 	ClusterRedisProvider    Provider = "cluster_redis"
+	AliCloudStorageProvider Provider = "alicloud_storage"
 )
 
 var (
@@ -25,6 +26,7 @@ var (
 	ErrProviderNotAWS             = errors.New("provider is not aws")
 	ErrProviderNotStandaloneRedis = errors.New("provider is not standalone redis")
 	ErrProviderNotClusterRedis    = errors.New("provider is not cluster redis")
+	ErrProviderNotAliCloudStorage = errors.New("provider is not aliyun oss")
 	ErrEmptySecretID              = errors.New("secret_id is empty")
 	ErrEmptySecretKey             = errors.New("secret_key is empty")
 	ErrEmptyRegion                = errors.New("region is empty")
@@ -41,6 +43,7 @@ type Option interface {
 	CheckTencentCloud() error
 	CheckStandaloneRedis() error
 	CheckClusterRedis() error
+	CheckAliCloudStorage() error
 }
 
 type CommonOption struct {
@@ -106,6 +109,13 @@ func (option CommonOption) CheckAWS() error {
 func (option CommonOption) CheckTencentCloud() error {
 	if option.Provider != TencentCloudProvider {
 		return ErrProviderNotTencentCloud
+	}
+	return option.check()
+}
+
+func (option CommonOption) CheckAliCloudStorage() error {
+	if option.Provider != AliCloudStorageProvider {
+		return ErrProviderNotAliCloudStorage
 	}
 	return option.check()
 }
