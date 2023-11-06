@@ -194,6 +194,36 @@ func (scheduler *Scheduler) Stop(force bool) {
 	}
 }
 
+// StopWithTimeout stops the current scheduler, waiting running tasks at most `timeout` duration.
+func (scheduler *Scheduler) StopWithTimeout(timeout time.Duration) {
+	if !atomic.CompareAndSwapInt32(&scheduler.started, 1, 0) {
+		return
+	}
+	scheduler.stop <- true
+	if timeout <= 0 {
+		scheduler.workerPool.Release()
+		return
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			scheduler.workerPool.Release()
+			return
+		default:
+			runningCount := scheduler.runningJobCount()
+			if runningCount > 0 {
+				log.Printf("waiting %d jobs to finish...\n", runningCount)
+			} else {
+				scheduler.workerPool.Release()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
 // JobStats returns all jobs' statistics in the current scheduler.
 func (scheduler *Scheduler) JobStats() map[string][]JobStat {
 	jobStats := make(map[string][]JobStat, len(scheduler.jobs))
