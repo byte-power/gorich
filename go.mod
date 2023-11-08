@@ -16,6 +16,7 @@ require (
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/go-redis/redis/v8 v8.4.3
 	github.com/panjf2000/ants/v2 v2.4.3
+	github.com/redis/go-redis/v9 v9.3.0
 	github.com/relvacode/iso8601 v1.1.0
 	github.com/spf13/pflag v1.0.3
 	github.com/stretchr/testify v1.7.0
