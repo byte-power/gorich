@@ -55,6 +55,21 @@ func main() {
 		Region:    "aws_region_xxx",
 	}
 	queue_examples("aws_queue_name", optionForAWS)
+
+	dialTimeout := 5 * time.Second
+	clusterRedisQueueOptionV7 := queue.ClusterRedisQueueOptionV7{
+		ClusterRedisQueueOption: queue.ClusterRedisQueueOption{
+			Addrs: []string{
+				"localhost:30001",
+				"localhost:30002",
+				"localhost:30003",
+			},
+			ConsumerGroup: "save_task_consumer_group_2",
+			DialTimeout:   &dialTimeout,
+			Idle:          10,
+		},
+	}
+	queue_examples("redis_cluster_queue_v7", clusterRedisQueueOptionV7)
 }
 
 func queue_examples(queueOrTopicName string, option cloud.Option) {
@@ -64,6 +79,7 @@ func queue_examples(queueOrTopicName string, option cloud.Option) {
 		return
 	}
 	defer service.Close()
+	fmt.Printf("get service %+v\n", service)
 
 	producer, err := service.CreateProducer()
 	if err != nil {
