@@ -36,6 +36,10 @@ func GetQueueService(queueOrTopicSubName string, option cloud.Option) (QueueServ
 		return GetStandaloneRedisQueueService(queueOrTopicSubName, option)
 	} else if option.GetProvider() == cloud.ClusterRedisProvider {
 		return GetClusterRedisQueueService(queueOrTopicSubName, option)
+	} else if option.GetProvider() == cloud.StandaloneRedisProviderV7 {
+		return getStandaloneRedisQueueServiceForV7(queueOrTopicSubName, option)
+	} else if option.GetProvider() == cloud.ClusterRedisProviderV7 {
+		return getClusterRedisQueueServiceV7(queueOrTopicSubName, option)
 	}
 	return nil, cloud.ErrUnsupportedCloudProvider
 }

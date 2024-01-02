@@ -13,11 +13,13 @@ import (
 type Provider string
 
 const (
-	AWSProvider             Provider = "aws"
-	TencentCloudProvider    Provider = "tencentcloud"
-	StandaloneRedisProvider Provider = "standalone_redis"
-	ClusterRedisProvider    Provider = "cluster_redis"
-	AliCloudStorageProvider Provider = "alicloud_storage"
+	AWSProvider               Provider = "aws"
+	TencentCloudProvider      Provider = "tencentcloud"
+	StandaloneRedisProvider   Provider = "standalone_redis"
+	ClusterRedisProvider      Provider = "cluster_redis"
+	StandaloneRedisProviderV7 Provider = "standalone_redis_v7"
+	ClusterRedisProviderV7    Provider = "cluster_redis_v7"
+	AliCloudStorageProvider   Provider = "alicloud_storage"
 )
 
 var (
