@@ -353,7 +353,7 @@ func (coordinator *Coordinator) coordinate(jobName string, scheduledTime time.Ti
 				if scheduledInterval == 0 {
 					redisKeyDuration = 5 * time.Second
 				} else {
-					redisKeyDuration = scheduledInterval
+					redisKeyDuration = coordinator.getCoordinatorKeyExpiration(scheduledInterval)
 				}
 				if err != nil {
 					if err == redis.Nil {
@@ -402,6 +402,13 @@ func (coordinator *Coordinator) coordinate(jobName string, scheduledTime time.Ti
 		err = newCoordinateError(err)
 	}
 	return stat, err
+}
+
+func (coordinator *Coordinator) getCoordinatorKeyExpiration(scheduledInterval time.Duration) time.Duration {
+	if scheduledInterval <= time.Second {
+		return scheduledInterval
+	}
+	return scheduledInterval - time.Second
 }
 
 func (coordinator *Coordinator) isJobSchedulable(name string, scheduledTime time.Time, scheduledInterval time.Duration) (bool, error) {
@@ -462,7 +469,7 @@ func (coordinator *Coordinator) getScheduledTime(jobName string) (time.Time, err
 	value, err := client.Get(contextTODO, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			err = nil
+			return time.Time{}, nil
 		}
 		return time.Time{}, newCoordinateError(err)
 	}
