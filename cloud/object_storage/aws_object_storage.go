@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io/ioutil"
+	"io"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -110,7 +110,7 @@ func (service *AWSObjectStorageService) GetObject(ctx context.Context, key strin
 		}
 		return Object{}, err
 	}
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return Object{}, err
 	}
@@ -138,6 +138,9 @@ func (service *AWSObjectStorageService) PutObject(ctx context.Context, key strin
 		Bucket: &service.bucketName,
 		Key:    &key,
 		Body:   bytes.NewReader(input.Body),
+	}
+	if input.Tagging != "" {
+		opts.Tagging = aws.String(input.Tagging)
 	}
 	if input.ContentType != "" {
 		opts.ContentType = &input.ContentType

@@ -5,12 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/alibabacloud-go/tea/tea"
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 	"github.com/byte-power/gorich/cloud"
 	"github.com/byte-power/gorich/utils"
-	"io"
-	"time"
 )
 
 var ossClientMap = make(map[string]*oss.Client)
@@ -264,7 +265,14 @@ func (service *AliCloudObjectStorageService) PutObject(ctx context.Context, key 
 	if err != nil {
 		return err
 	}
-	return bucket.PutObject(key, bytes.NewReader(input.Body), oss.ContentType(input.ContentType))
+	var opts []oss.Option
+	if input.ContentType != "" {
+		opts = append(opts, oss.ContentType(input.ContentType))
+	}
+	if input.Tagging != "" {
+		opts = append(opts, oss.SetHeader(oss.HTTPHeaderOssTagging, input.Tagging))
+	}
+	return bucket.PutObject(key, bytes.NewReader(input.Body), opts...)
 }
 
 func (service *AliCloudObjectStorageService) DeleteObject(ctx context.Context, key string) error {

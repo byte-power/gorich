@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -55,7 +55,8 @@ func GetTencentCloudObjectService(bucketName string, option cloud.Option) (Objec
 		Transport: &cos.AuthorizationTransport{
 			SecretID:  option.GetSecretID(),
 			SecretKey: option.GetSecretKey(),
-		}})
+		},
+	})
 	return &TencentCloudObjectStorageService{client: client}, nil
 }
 
@@ -136,7 +137,7 @@ func (service *TencentCloudObjectStorageService) GetObject(ctx context.Context, 
 		}
 		return Object{}, err
 	}
-	bs, err := ioutil.ReadAll(resp.Body)
+	bs, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return Object{}, err
 	}
@@ -198,13 +199,12 @@ func (service *TencentCloudObjectStorageService) PutObject(ctx context.Context, 
 	if input == nil {
 		return errors.New("parameter input is nil")
 	}
-	var opts *cos.ObjectPutOptions
+	opts := &cos.ObjectPutOptions{ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{}}
 	if input.ContentType != "" {
-		opts = &cos.ObjectPutOptions{
-			ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{
-				ContentType: input.ContentType,
-			},
-		}
+		opts.ContentType = input.ContentType
+	}
+	if input.Tagging != "" {
+		opts.XOptionHeader = &http.Header{"x-cos-tagging": []string{input.Tagging}}
 	}
 	_, err := service.client.Object.Put(ctx, key, bytes.NewReader(input.Body), opts)
 	return err
