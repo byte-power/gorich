@@ -44,7 +44,7 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 	}
 
 	files := map[string]*object_storage.PutObjectInput{
-		"abc/a.txt":  {Body: []byte("abc"), ContentType: "application/json"},
+		"abc/a.txt":  {Body: []byte("abc"), ContentType: "application/json", Tagging: "Key1=Value1&Key2=Value2"},
 		"abc/ab.txt": {Body: []byte("abcdefg"), ContentType: "text/html"},
 		"bc/b.txt":   {Body: []byte("xyz")},
 	}
