@@ -257,3 +257,19 @@ func (service *TencentCloudObjectStorageService) GetSignedURLForExistedKey(ctx c
 	}
 	return service.GetSignedURL(key, duration)
 }
+
+func (service *TencentCloudObjectStorageService) PutSignedURL(key string, duration time.Duration) (string, error) {
+	if key == "" {
+		return "", ErrObjectKeyEmpty
+	}
+	url, err := service.client.Object.GetPresignedURL(
+		context.Background(), http.MethodPut, key,
+		service.client.GetCredential().SecretID,
+		service.client.GetCredential().SecretKey,
+		duration, nil,
+	)
+	if err != nil {
+		return "", err
+	}
+	return url.String(), nil
+}

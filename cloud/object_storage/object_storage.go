@@ -24,6 +24,7 @@ type ObjectStorageService interface {
 	GetSignedURL(key string, duration time.Duration) (string, error)
 	// GetSignedURLForExistedKey generates signed url if key exists. If key does not exist, return error
 	GetSignedURLForExistedKey(ctx context.Context, key string, duration time.Duration) (string, error)
+	PutSignedURL(key string, duration time.Duration) (string, error)
 }
 
 type PutObjectInput struct {
