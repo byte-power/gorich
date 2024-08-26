@@ -204,13 +204,19 @@ func (service *AWSObjectStorageService) GetSignedURLForExistedKey(ctx context.Co
 	return service.GetSignedURL(key, duration)
 }
 
-func (service *AWSObjectStorageService) PutSignedURL(key string, duration time.Duration) (string, error) {
+func (service *AWSObjectStorageService) PutSignedURL(key string, duration time.Duration, option PutHeaderOption) (string, error) {
 	if key == "" {
 		return "", ErrObjectKeyEmpty
 	}
+
 	request, _ := service.client.PutObjectRequest(&s3.PutObjectInput{
-		Bucket: &service.bucketName,
-		Key:    &key,
+		Bucket:             &service.bucketName,
+		Key:                &key,
+		ContentDisposition: option.ContentDisposition,
+		ContentEncoding:    option.ContentEncoding,
+		ContentMD5:         option.ContentMD5,
+		ContentType:        option.ContentType,
+		ContentLength:      option.ContentLength,
 	})
 	url, err := request.Presign(duration)
 	if err != nil {

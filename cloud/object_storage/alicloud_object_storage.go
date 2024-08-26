@@ -320,7 +320,7 @@ func (service *AliCloudObjectStorageService) GetSignedURLForExistedKey(ctx conte
 	return service.GetSignedURL(key, duration)
 }
 
-func (service *AliCloudObjectStorageService) PutSignedURL(key string, duration time.Duration) (string, error) {
+func (service *AliCloudObjectStorageService) PutSignedURL(key string, duration time.Duration, option PutHeaderOption) (string, error) {
 	if key == "" {
 		return "", ErrObjectKeyEmpty
 	}
@@ -328,5 +328,6 @@ func (service *AliCloudObjectStorageService) PutSignedURL(key string, duration t
 	if err != nil {
 		return "", err
 	}
-	return bucket.SignURL(key, oss.HTTPPut, int64(duration.Seconds()))
+	options := option.ToAliCloudOptions()
+	return bucket.SignURL(key, oss.HTTPPut, int64(duration.Seconds()), options...)
 }
