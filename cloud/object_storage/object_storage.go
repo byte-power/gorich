@@ -88,6 +88,7 @@ type PutHeaderOption struct {
 	ContentMD5         *string
 	ContentType        *string
 	ContentLength      *int64
+	Tagging            *string
 }
 
 func (o *PutHeaderOption) ToAliCloudOptions() []oss.Option {
@@ -107,6 +108,9 @@ func (o *PutHeaderOption) ToAliCloudOptions() []oss.Option {
 	}
 	if o.ContentLength != nil {
 		options = append(options, oss.ContentLength(*o.ContentLength))
+	}
+	if o.Tagging != nil {
+		options = append(options, oss.SetHeader(oss.HTTPHeaderOssTagging, *o.Tagging))
 	}
 	return options
 }
@@ -132,6 +136,9 @@ func (o *PutHeaderOption) ToTencentCloudOptions() *cos.PresignedURLOptions {
 	}
 	if o.ContentLength != nil {
 		opt.Header.Add("Content-Length", strconv.FormatInt(*o.ContentLength, 10))
+	}
+	if o.Tagging != nil {
+		opt.Header.Add("x-cos-tagging", *o.Tagging)
 	}
 	return opt
 }

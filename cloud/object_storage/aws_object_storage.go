@@ -217,6 +217,7 @@ func (service *AWSObjectStorageService) PutSignedURL(key string, duration time.D
 		ContentMD5:         option.ContentMD5,
 		ContentType:        option.ContentType,
 		ContentLength:      option.ContentLength,
+		Tagging:            option.Tagging,
 	})
 	url, err := request.Presign(duration)
 	if err != nil {
