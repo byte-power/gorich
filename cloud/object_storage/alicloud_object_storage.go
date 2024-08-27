@@ -17,15 +17,21 @@ import (
 var ossClientMap = make(map[string]*oss.Client)
 
 var (
-	ErrAliCloudStorageServiceCredentialTypeEmpty = errors.New("credential_type for alicloud storage service is empty")
-	ErrAliCloudStorageServiceEndPointEmpty       = errors.New("endpoint for alicloud storage service is empty")
-	ErrAliCloudStorageServiceSessionNameEmpty    = errors.New("session_name for alicloud storage service is empty")
+	ErrAliCloudStorageServiceCredentialTypeEmpty  = errors.New("credential_type for alicloud storage service is empty")
+	ErrAliCloudStorageServiceEndPointEmpty        = errors.New("endpoint for alicloud storage service is empty")
+	ErrAliCloudStorageServiceSessionNameEmpty     = errors.New("session_name for alicloud storage service is empty")
+	ErrAliCloudStorageServiceAccessKeyIDEmpty     = errors.New("access_key_id for alicloud storage service is empty")
+	ErrAliCloudStorageServiceAccessKeySecretEmpty = errors.New("access_key_secret for alicloud storage service is empty")
 )
 
 type AliCloudStorageOption struct {
-	CredentialType string // eg: "oidc_role_arn"
+	CredentialType string // eg: "oidc_role_arn" or "ak"
 	EndPoint       string // eg: "oss-cn-zhangjiakou.aliyuncs.com"
 	SessionName    string // eg: "test-rrsa-oidc-token"
+
+	// "ak" required
+	AccessKeyID     string
+	AccessKeySecret string
 }
 
 func (option AliCloudStorageOption) GetProvider() cloud.Provider {
@@ -79,8 +85,18 @@ func (option AliCloudStorageOption) check() error {
 	if option.EndPoint == "" {
 		return ErrAliCloudStorageServiceEndPointEmpty
 	}
-	if option.SessionName == "" {
-		return ErrAliCloudStorageServiceSessionNameEmpty
+
+	if option.CredentialType == "oidc_role_arn" {
+		if option.SessionName == "" {
+			return ErrAliCloudStorageServiceSessionNameEmpty
+		}
+	} else if option.CredentialType == "ak" {
+		if option.AccessKeyID == "" {
+			return ErrAliCloudStorageServiceAccessKeyIDEmpty
+		}
+		if option.AccessKeySecret == "" {
+			return ErrAliCloudStorageServiceAccessKeySecretEmpty
+		}
 	}
 	return nil
 }
@@ -109,17 +125,28 @@ func GetAliCloudObjectService(bucketName string, option cloud.Option) (ObjectSto
 		return &AliCloudObjectStorageService{client: client, bucketName: bucketName}, nil
 	}
 
-	cred, err := newOidcCredential(storageOption.CredentialType, storageOption.SessionName)
-	if err != nil {
-		return nil, err
-	}
-
-	provider := &aliCloudCredentialsProvider{
-		cred: cred,
-	}
-	client, err := oss.New(storageOption.EndPoint, "", "", oss.SetCredentialsProvider(provider))
-	if err != nil {
-		return nil, err
+	var client *oss.Client
+	if storageOption.CredentialType == "oidc_role_arn" {
+		cred, err := newOidcCredential(storageOption.CredentialType, storageOption.SessionName)
+		if err != nil {
+			return nil, err
+		}
+		provider := &aliCloudCredentialsProvider{
+			cred: cred,
+		}
+		ossClient, err := oss.New(storageOption.EndPoint, "", "", oss.SetCredentialsProvider(provider))
+		if err != nil {
+			return nil, err
+		}
+		client = ossClient
+	} else if storageOption.CredentialType == "ak" {
+		ossClient, err := oss.New(storageOption.EndPoint, storageOption.AccessKeyID, storageOption.AccessKeySecret)
+		if err != nil {
+			return nil, err
+		}
+		client = ossClient
+	} else {
+		return nil, fmt.Errorf("credential type '%s' unsupported", storageOption.CredentialType)
 	}
 
 	// cache client
