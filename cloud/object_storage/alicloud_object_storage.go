@@ -39,11 +39,11 @@ func (option AliCloudStorageOption) GetProvider() cloud.Provider {
 }
 
 func (option AliCloudStorageOption) GetSecretID() string {
-	return ""
+	return option.AccessKeyID
 }
 
 func (option AliCloudStorageOption) GetSecretKey() string {
-	return ""
+	return option.AccessKeySecret
 }
 
 func (option AliCloudStorageOption) GetAssumeRoleArn() string {
