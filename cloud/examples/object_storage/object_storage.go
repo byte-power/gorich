@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
+	"io"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/byte-power/gorich/cloud"
@@ -29,11 +34,16 @@ func main() {
 	object_storage_examples("aws_bucket_name_xxx", optionForAWS)
 
 	optionForAliOSS := object_storage.AliCloudStorageOption{
-		CredentialType: "oidc_role_arn",
-		EndPoint:       "oss-cn-zhangjiakou.aliyuncs.com",
-		SessionName:    "test-rrsa-oidc-token",
+		//CredentialType: "oidc_role_arn",
+		//EndPoint:       "oss-cn-zhangjiakou.aliyuncs.com",
+		//SessionName:    "test-rrsa-oidc-token",
+
+		CredentialType:  "ak",
+		EndPoint:        "oss-cn-beijing.aliyuncs.com",
+		AccessKeyID:     "alicloud_access_key_id_xxx",
+		AccessKeySecret: "alicloud_access_key_secret_xxx",
 	}
-	object_storage_examples("my-bucket", optionForAliOSS)
+	object_storage_examples("alicloud_bucket_name_xxx", optionForAliOSS)
 }
 
 func object_storage_examples(bucketName string, option cloud.Option) {
@@ -186,4 +196,80 @@ func object_storage_examples(bucketName string, option cloud.Option) {
 			fmt.Printf("GetSignedURLForExistedKey %s %s\n", name, url)
 		}
 	}
+
+	// PutSignedURL examples
+	for name, item := range files {
+		// get pre-signed put url
+		opt := object_storage.PutHeaderOption{
+			ContentType: aws.String(item.ContentType),
+		}
+		url, err := service.PutSignedURL(name, 1*time.Hour, opt)
+		if err != nil {
+			fmt.Printf("GetSignedURL for object %s error %s\n", name, err)
+			return
+		}
+		fmt.Printf("GetSignedURL for put object  %s %s\n", name, url)
+
+		// put content to s3 with signed-url
+		if err := uploadContent(url, string(item.Body), item.ContentType); err != nil {
+			fmt.Printf("Error uploading content: %v\n", err)
+			return
+		}
+
+		// get pre-signed url for download and check
+		getSignedURL, err := service.GetSignedURL(name, 1*time.Hour)
+		if err != nil {
+			fmt.Printf("GetSignedURL for object %s error %s\n", name, err)
+			return
+		}
+		fmt.Printf("GetSignedURL for get object %s %s\n", name, getSignedURL)
+
+		// check content
+		content, err := accessContentBySignedURL(getSignedURL)
+		if err != nil {
+			log.Fatalf("Get content err: %v", err)
+		}
+		fmt.Println("Get content:", content)
+	}
+}
+
+// uploadContent uploads content to S3 using the provided presigned URL.
+func uploadContent(signedURL, content, contentType string) error {
+	req, err := http.NewRequest("PUT", signedURL, bytes.NewBuffer([]byte(content)))
+	if err != nil {
+		return fmt.Errorf("error creating PUT request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error executing PUT request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("upload failed with status code %d", resp.StatusCode)
+	}
+	fmt.Println("Content uploaded successfully")
+	return nil
+}
+
+// accessContentBySignedURL access content by Signed URL
+func accessContentBySignedURL(url string) (string, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("access content failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("access content failed, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("get content failed: %v", err)
+	}
+	return string(body), nil
 }

@@ -204,6 +204,28 @@ func (service *AWSObjectStorageService) GetSignedURLForExistedKey(ctx context.Co
 	return service.GetSignedURL(key, duration)
 }
 
+func (service *AWSObjectStorageService) PutSignedURL(key string, duration time.Duration, option PutHeaderOption) (string, error) {
+	if key == "" {
+		return "", ErrObjectKeyEmpty
+	}
+
+	request, _ := service.client.PutObjectRequest(&s3.PutObjectInput{
+		Bucket:             &service.bucketName,
+		Key:                &key,
+		ContentDisposition: option.ContentDisposition,
+		ContentEncoding:    option.ContentEncoding,
+		ContentMD5:         option.ContentMD5,
+		ContentType:        option.ContentType,
+		ContentLength:      option.ContentLength,
+		Tagging:            option.Tagging,
+	})
+	url, err := request.Presign(duration)
+	if err != nil {
+		return "", err
+	}
+	return url, nil
+}
+
 func isNotFoundErrorForAWS(err error) bool {
 	awsErr, ok := err.(awserr.Error)
 	if !ok {
