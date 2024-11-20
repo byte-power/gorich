@@ -20,6 +20,24 @@ const (
 	StandaloneRedisProviderV7 Provider = "standalone_redis_v7"
 	ClusterRedisProviderV7    Provider = "cluster_redis_v7"
 	AliCloudStorageProvider   Provider = "alicloud_storage"
+	AliCloudMNSQueueProvider  Provider = "alicloud_mns_queue"
+)
+
+type AliCloudCredentialType string
+
+const (
+	AliCloudAccessKeyCredentialType   AliCloudCredentialType = "access_key"
+	AliCloudECSRamRoleCredentialType  AliCloudCredentialType = "ecs_ram_role"
+	AliCloudOIDCRoleARNCredentialType AliCloudCredentialType = "oidc_role_arn"
+)
+
+const (
+	AliCloudEnvAccessKeyID     = "ALIBABA_CLOUD_ACCESS_KEY_ID"
+	AliCloudEnvAccessKeySecret = "ALIBABA_CLOUD_ACCESS_KEY_SECRET"
+	AliCloudEnvRoleArn         = "ALIBABA_CLOUD_ROLE_ARN"
+	AliCloudEnvOIDCProviderArn = "ALIBABA_CLOUD_OIDC_PROVIDER_ARN"
+	AliCloudEnvOIDCTokenFile   = "ALIBABA_CLOUD_OIDC_TOKEN_FILE"
+	AliCloudEnvRoleSessionName = "ALIBABA_CLOUD_ROLE_SESSION_NAME"
 )
 
 var (
