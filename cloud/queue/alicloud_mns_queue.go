@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	ali_mns "github.com/aliyun/aliyun-mns-go-sdk"
 	"github.com/aliyun/credentials-go/credentials"
@@ -27,17 +29,23 @@ func (message *AliMNSQueueMessage) Body() string {
 }
 
 type AliMNSQueueService struct {
-	queue  ali_mns.AliMNSQueue
-	option *AliMNSClientOption
+	queueName       string
+	queue           ali_mns.AliMNSQueue
+	credential      credentials.Credential
+	credentialModel *credentials.CredentialModel
+	option          *AliMNSClientOption
+	lock            *sync.RWMutex
+	stopCh          *chan struct{}
 }
 
 type AliMNSClientOption struct {
-	EndPoint                             string `json:"endpoint"`
-	TimeoutSecond                        int64  `json:"timeout_second"`
-	MaxConnsPerHost                      int    `json:"max_conns_per_host"`
-	QueueQPS                             int32  `json:"queue_qps"`
-	MessagePriority                      int    `json:"message_priority"`
-	ReceiveMessageLongPollingWaitSeconds int    `json:"receive_message_long_polling_wait_seconds"`
+	EndPoint        string `json:"endpoint"`
+	TimeoutSecond   int64  `json:"timeout_second"`
+	MaxConnsPerHost int    `json:"max_conns_per_host"`
+	QueueQPS        int32  `json:"queue_qps"`
+	// MessagePriority is used to set message priority when sending messages
+	MessagePriority                      int `json:"message_priority"`
+	ReceiveMessageLongPollingWaitSeconds int `json:"receive_message_long_polling_wait_seconds"`
 
 	CredentialType cloud.AliCloudCredentialType `json:"credential_type"`
 
@@ -151,7 +159,7 @@ func (option AliMNSClientOption) CheckAliCloudStorage() error {
 	return cloud.ErrProviderNotAliCloudStorage
 }
 
-func (option *AliMNSClientOption) mergeDefaultOptions() {
+func (option *AliMNSClientOption) mergeDefaultOptions() AliMNSClientOption {
 	switch option.CredentialType {
 	case cloud.AliCloudAccessKeyCredentialType:
 		if option.AccessKeyId == "" {
@@ -180,6 +188,7 @@ func (option *AliMNSClientOption) mergeDefaultOptions() {
 	if option.MessagePriority == 0 {
 		option.MessagePriority = AliMNSMessageDefaultPriority
 	}
+	return *option
 }
 
 var ErrAliMNSQueueNameEmpty = errors.New("mns queue name is empty")
@@ -192,83 +201,169 @@ func getAliMNSQueueService(queueName string, option cloud.Option) (QueueService,
 	if !ok {
 		return nil, fmt.Errorf("option parameter %+v should be AliMNSClientOption type", option)
 	}
-	mnsOption.mergeDefaultOptions()
+	mnsOption = mnsOption.mergeDefaultOptions()
 	if err := mnsOption.check(); err != nil {
 		return nil, err
 	}
-	config := ali_mns.AliMNSClientConfig{
-		EndPoint:        mnsOption.EndPoint,
-		TimeoutSecond:   mnsOption.TimeoutSecond,
-		MaxConnsPerHost: mnsOption.MaxConnsPerHost,
+	service := &AliMNSQueueService{
+		queueName:       queueName,
+		queue:           nil,
+		credential:      nil,
+		credentialModel: nil,
+		option:          &mnsOption,
+		lock:            nil,
+		stopCh:          nil,
 	}
-	switch mnsOption.CredentialType {
+	return service, nil
+}
+
+func (service *AliMNSQueueService) initializeQueue() (*AliMNSQueueService, error) {
+	if err := service.option.check(); err != nil {
+		return nil, err
+	}
+	config := ali_mns.AliMNSClientConfig{
+		EndPoint:        service.option.EndPoint,
+		TimeoutSecond:   service.option.TimeoutSecond,
+		MaxConnsPerHost: service.option.MaxConnsPerHost,
+	}
+	var credentialConfig *credentials.Config
+	switch service.option.CredentialType {
 	case cloud.AliCloudAccessKeyCredentialType:
-		config.AccessKeyId = mnsOption.AccessKeyId
-		config.AccessKeySecret = mnsOption.AccessKeySecret
+		credentialConfig = &credentials.Config{
+			Type:            (*string)(&service.option.CredentialType),
+			AccessKeyId:     &service.option.AccessKeyId,
+			AccessKeySecret: &service.option.AccessKeySecret,
+		}
 	case cloud.AliCloudECSRamRoleCredentialType:
-		credentialConfig := &credentials.Config{
-			Type:     (*string)(&mnsOption.CredentialType),
-			RoleName: &mnsOption.RoleName,
-		}
-		credential, err := credentials.NewCredential(credentialConfig)
-		if err != nil {
-			return nil, fmt.Errorf("new credential error %w", err)
-		}
-		credentialModel, err := credential.GetCredential()
-		if err != nil {
-			return nil, fmt.Errorf("get credential model error %w", err)
-		}
-		if credentialModel.AccessKeyId != nil {
-			config.AccessKeyId = *credentialModel.AccessKeyId
-		}
-		if credentialModel.AccessKeySecret != nil {
-			config.AccessKeySecret = *credentialModel.AccessKeySecret
-		}
-		if credentialModel.SecurityToken != nil {
-			config.Token = *credentialModel.SecurityToken
+		credentialConfig = &credentials.Config{
+			Type:     (*string)(&service.option.CredentialType),
+			RoleName: &service.option.RoleName,
 		}
 	case cloud.AliCloudOIDCRoleARNCredentialType:
-		credentialConfig := &credentials.Config{
-			Type:                  (*string)(&mnsOption.CredentialType),
-			OIDCProviderArn:       &mnsOption.OIDCProviderArn,
-			OIDCTokenFilePath:     &mnsOption.OIDCTokenFilePath,
-			RoleArn:               &mnsOption.RoleArn,
-			RoleSessionName:       &mnsOption.RoleSessionName,
-			RoleSessionExpiration: &mnsOption.RoleSessionExpiration,
-			Policy:                &mnsOption.Policy,
-		}
-		credential, err := credentials.NewCredential(credentialConfig)
-		if err != nil {
-			return nil, fmt.Errorf("new credential error %w", err)
-		}
-		credentialModel, err := credential.GetCredential()
-		if err != nil {
-			return nil, fmt.Errorf("get credential model error %w", err)
-		}
-		if credentialModel.AccessKeyId != nil {
-			config.AccessKeyId = *credentialModel.AccessKeyId
-		}
-		if credentialModel.AccessKeySecret != nil {
-			config.AccessKeySecret = *credentialModel.AccessKeySecret
-		}
-		if credentialModel.SecurityToken != nil {
-			config.Token = *credentialModel.SecurityToken
+		credentialConfig = &credentials.Config{
+			Type:                  (*string)(&service.option.CredentialType),
+			OIDCProviderArn:       &service.option.OIDCProviderArn,
+			OIDCTokenFilePath:     &service.option.OIDCTokenFilePath,
+			RoleArn:               &service.option.RoleArn,
+			RoleSessionName:       &service.option.RoleSessionName,
+			RoleSessionExpiration: &service.option.RoleSessionExpiration,
+			Policy:                &service.option.Policy,
 		}
 	}
+	credential, err := credentials.NewCredential(credentialConfig)
+	if err != nil {
+		return nil, fmt.Errorf("new credential error %w", err)
+	}
+	credentialModel, err := credential.GetCredential()
+	if err != nil {
+		return nil, fmt.Errorf("get credential model error %w", err)
+	}
+	if credentialModel.AccessKeyId != nil {
+		config.AccessKeyId = *credentialModel.AccessKeyId
+	}
+	if credentialModel.AccessKeySecret != nil {
+		config.AccessKeySecret = *credentialModel.AccessKeySecret
+	}
+	if credentialModel.SecurityToken != nil {
+		config.Token = *credentialModel.SecurityToken
+	}
 	client := ali_mns.NewAliMNSClientWithConfig(config)
-	queue := ali_mns.NewMNSQueue(queueName, client, mnsOption.QueueQPS)
-	return &AliMNSQueueService{queue: queue, option: &mnsOption}, nil
+	queue := ali_mns.NewMNSQueue(service.queueName, client, service.option.QueueQPS)
+	stopCh := make(chan struct{}, 1)
+	initializedService := &AliMNSQueueService{
+		queueName:       service.queueName,
+		queue:           queue,
+		credential:      credential,
+		credentialModel: credentialModel,
+		option:          service.option,
+		lock:            &sync.RWMutex{},
+		stopCh:          &stopCh,
+	}
+	if service.needRefreshCredential() {
+		go initializedService.refreshCredential()
+	}
+	return initializedService, nil
+}
+
+func (service *AliMNSQueueService) needRefreshCredential() bool {
+	return service.option.CredentialType != cloud.AliCloudAccessKeyCredentialType
+}
+
+func (service *AliMNSQueueService) _refreshCredential() error {
+	config := ali_mns.AliMNSClientConfig{
+		EndPoint:        service.option.EndPoint,
+		TimeoutSecond:   service.option.TimeoutSecond,
+		MaxConnsPerHost: service.option.MaxConnsPerHost,
+	}
+	// GetCredential will update credential if the current one is going to expire.
+	credentialModel, err := service.credential.GetCredential()
+	if err != nil {
+		return fmt.Errorf("get credential model error when updating credential %w", err)
+	}
+	if service.isCredentialNotUpdated(credentialModel) || credentialModel == nil {
+		return nil
+	}
+	if credentialModel.AccessKeyId != nil {
+		config.AccessKeyId = *credentialModel.AccessKeyId
+	}
+	if credentialModel.AccessKeySecret != nil {
+		config.AccessKeySecret = *credentialModel.AccessKeySecret
+	}
+	if credentialModel.SecurityToken != nil {
+		config.Token = *credentialModel.SecurityToken
+	}
+	client := ali_mns.NewAliMNSClientWithConfig(config)
+	service.lock.Lock()
+	defer service.lock.Unlock()
+	service.queue = ali_mns.NewMNSQueue(service.queue.Name(), client, service.option.QueueQPS)
+	service.credentialModel = credentialModel
+	return nil
+}
+
+func (service *AliMNSQueueService) isCredentialNotUpdated(credentialModel *credentials.CredentialModel) bool {
+	if service.credentialModel == nil || credentialModel == nil {
+		return service.credentialModel == credentialModel
+	}
+
+	return isStringPtrEqual(service.credentialModel.AccessKeyId, credentialModel.AccessKeyId) &&
+		isStringPtrEqual(service.credentialModel.AccessKeySecret, credentialModel.AccessKeySecret) &&
+		isStringPtrEqual(service.credentialModel.SecurityToken, credentialModel.SecurityToken)
+}
+
+func isStringPtrEqual(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func (service *AliMNSQueueService) refreshCredential() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if err := service._refreshCredential(); err != nil {
+				fmt.Printf("Error updating credential: %v\n", err)
+			}
+		case <-*service.stopCh:
+			return
+		}
+	}
 }
 
 func (service *AliMNSQueueService) CreateProducer() (Producer, error) {
-	return service, nil
+	return service.initializeQueue()
 }
 
 func (service *AliMNSQueueService) CreateConsumer() (Consumer, error) {
-	return service, nil
+	return service.initializeQueue()
 }
 
 func (service *AliMNSQueueService) Close() error {
+	if service.stopCh != nil && service.needRefreshCredential() {
+		*service.stopCh <- struct{}{}
+	}
 	return nil
 }
 
@@ -278,6 +373,8 @@ func (service *AliMNSQueueService) SendMessage(ctx context.Context, body string)
 		priority = service.option.MessagePriority
 	}
 	input := ali_mns.MessageSendRequest{MessageBody: body, Priority: int64(priority)}
+	service.lock.RLock()
+	defer service.lock.RUnlock()
 	_, err := service.queue.SendMessage(input)
 	return err
 }
@@ -286,6 +383,7 @@ func (service *AliMNSQueueService) ReceiveMessages(ctx context.Context, maxCount
 	respChan := make(chan ali_mns.BatchMessageReceiveResponse, 1)
 	errChan := make(chan error, 1)
 	waitSeconds, ok := ctx.Value(ContextKeyAliMNSLongPollingWaitSeconds).(int)
+	service.lock.RLock()
 	if ok {
 		service.queue.BatchReceiveMessage(respChan, errChan, int32(maxCount), int64(waitSeconds))
 	} else if service.option.ReceiveMessageLongPollingWaitSeconds > 0 {
@@ -293,6 +391,7 @@ func (service *AliMNSQueueService) ReceiveMessages(ctx context.Context, maxCount
 	} else {
 		service.queue.BatchReceiveMessage(respChan, errChan, int32(maxCount))
 	}
+	service.lock.RUnlock()
 	select {
 	case resp := <-respChan:
 		messages := make([]Message, 0, len(resp.Messages))
@@ -312,5 +411,7 @@ func (service *AliMNSQueueService) AckMessage(ctx context.Context, message Messa
 	if !ok {
 		return errors.New("invalid message type, should be AliMNSQueueMessage")
 	}
+	service.lock.RLock()
+	defer service.lock.RUnlock()
 	return service.queue.DeleteMessage(msg.message.ReceiptHandle)
 }
