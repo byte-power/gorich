@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,6 +67,8 @@ type AliMNSClientOption struct {
 	RoleSessionName       string `json:"role_session_name"`
 	Policy                string `json:"policy"`
 	RoleSessionExpiration int    `json:"role_session_expiration"`
+
+	region string
 }
 
 func (option AliMNSClientOption) check() error {
@@ -132,7 +135,7 @@ func (option AliMNSClientOption) GetAssumeRoleArn() string {
 }
 
 func (option AliMNSClientOption) GetRegion() string {
-	return ""
+	return option.region
 }
 
 func (option AliMNSClientOption) GetAssumeRegion() string {
@@ -157,6 +160,15 @@ func (option AliMNSClientOption) CheckClusterRedis() error {
 
 func (option AliMNSClientOption) CheckAliCloudStorage() error {
 	return cloud.ErrProviderNotAliCloudStorage
+}
+
+func (option AliMNSClientOption) extractRegionFromEndpoint() (string, error) {
+	pieces := strings.Split(option.EndPoint, ".")
+	if len(pieces) != 5 {
+		return "", fmt.Errorf("queue endpoint %s is invalid", option.EndPoint)
+	}
+	regionSlice := strings.Split(pieces[2], "-internal")
+	return regionSlice[0], nil
 }
 
 func (option *AliMNSClientOption) mergeDefaultOptions() AliMNSClientOption {
@@ -205,6 +217,11 @@ func getAliMNSQueueService(queueName string, option cloud.Option) (QueueService,
 	if err := mnsOption.check(); err != nil {
 		return nil, err
 	}
+	region, err := mnsOption.extractRegionFromEndpoint()
+	if err != nil {
+		return nil, fmt.Errorf("endpoint extract region error %w", err)
+	}
+	mnsOption.region = region
 	service := &AliMNSQueueService{
 		queueName:       queueName,
 		queue:           nil,
@@ -298,7 +315,7 @@ func (service *AliMNSQueueService) _refreshCredential() error {
 	// GetCredential will update credential if the current one is going to expire.
 	credentialModel, err := service.credential.GetCredential()
 	if err != nil {
-		return fmt.Errorf("get credential model error when updating credential %w", err)
+		return fmt.Errorf("get credential model error when refreshing credential %w", err)
 	}
 	if service.isCredentialNotUpdated(credentialModel) || credentialModel == nil {
 		return nil
@@ -321,6 +338,8 @@ func (service *AliMNSQueueService) _refreshCredential() error {
 }
 
 func (service *AliMNSQueueService) isCredentialNotUpdated(credentialModel *credentials.CredentialModel) bool {
+	service.lock.RLock()
+	defer service.lock.RUnlock()
 	if service.credentialModel == nil || credentialModel == nil {
 		return service.credentialModel == credentialModel
 	}
@@ -344,7 +363,7 @@ func (service *AliMNSQueueService) refreshCredential() {
 		select {
 		case <-ticker.C:
 			if err := service._refreshCredential(); err != nil {
-				fmt.Printf("Error updating credential: %v\n", err)
+				fmt.Printf("Error refreshing credential: %v\n", err)
 			}
 		case <-*service.stopCh:
 			return
