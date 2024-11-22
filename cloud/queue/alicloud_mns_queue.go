@@ -12,6 +12,7 @@ import (
 	ali_mns "github.com/aliyun/aliyun-mns-go-sdk"
 	"github.com/aliyun/credentials-go/credentials"
 	"github.com/byte-power/gorich/cloud"
+	gogap_errors "github.com/gogap/errors"
 )
 
 const (
@@ -44,8 +45,18 @@ type AliMNSClientOption struct {
 	TimeoutSecond   int64  `json:"timeout_second"`
 	MaxConnsPerHost int    `json:"max_conns_per_host"`
 	QueueQPS        int32  `json:"queue_qps"`
-	// MessagePriority is used to set message priority when sending messages
-	MessagePriority                      int `json:"message_priority"`
+	// MessagePriority is used to set message priority when sending messages.
+	// message priority can also be set in ctx parameter when calling Producer's SendMessage method.
+	MessagePriority int `json:"message_priority"`
+
+	// ReceiveMessageLongPollingWaitSeconds is used to set long polling wait seconds.
+	// ReceiveMessages will wait at most `ReceiveMessageLongPollingWaitSeconds` seconds before return
+	// long polling period can also be set in ctx parameter when calling Consumer's ReceiveMessages method.
+	// The priority is:
+	// 1. value set when calling ReceiveMessages method
+	// 2. value set in option (i.e. here)
+	// 3. queue's long polling period configuration
+	// If want to disable long polling, neither set it in ReceiveMessages nor option, and also disable it in queue configuration.
 	ReceiveMessageLongPollingWaitSeconds int `json:"receive_message_long_polling_wait_seconds"`
 
 	CredentialType cloud.AliCloudCredentialType `json:"credential_type"`
@@ -421,6 +432,12 @@ func (service *AliMNSQueueService) ReceiveMessages(ctx context.Context, maxCount
 		}
 		return messages, nil
 	case err := <-errChan:
+		var errCode gogap_errors.ErrCode
+		if errors.As(err, &errCode) {
+			if strings.Contains(errCode.Error(), "MessageNotExist") {
+				return make([]Message, 0), nil
+			}
+		}
 		return nil, err
 	}
 }
