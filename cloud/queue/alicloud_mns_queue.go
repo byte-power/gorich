@@ -56,7 +56,7 @@ type AliMNSClientOption struct {
 	// 1. value set when calling ReceiveMessages method
 	// 2. value set in option (i.e. here)
 	// 3. queue's long polling period configuration
-	// If want to disable long polling, neither set it in ReceiveMessages nor option, and also disable it in queue configuration.
+	// If want to disable long polling, do not set the above 3 configurations.
 	ReceiveMessageLongPollingWaitSeconds int `json:"receive_message_long_polling_wait_seconds"`
 
 	CredentialType cloud.AliCloudCredentialType `json:"credential_type"`
