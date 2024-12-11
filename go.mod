@@ -4,6 +4,8 @@ go 1.14
 
 require (
 	github.com/alibabacloud-go/tea v1.2.1
+	github.com/aliyun/alibaba-cloud-sdk-go v1.63.52
+	github.com/aliyun/aliyun-mns-go-sdk v1.0.6
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.9+incompatible
 	github.com/aliyun/credentials-go v1.3.1
 	github.com/apache/pulsar-client-go v0.11.1
@@ -15,6 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.23.2
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/go-redis/redis/v8 v8.4.3
+	github.com/gogap/errors v0.0.0-20210818113853-edfbba0ddea9
 	github.com/panjf2000/ants/v2 v2.4.3
 	github.com/redis/go-redis/v9 v9.3.0
 	github.com/relvacode/iso8601 v1.1.0

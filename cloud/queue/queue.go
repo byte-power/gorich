@@ -40,6 +40,8 @@ func GetQueueService(queueOrTopicSubName string, option cloud.Option) (QueueServ
 		return getStandaloneRedisQueueServiceForV7(queueOrTopicSubName, option)
 	} else if option.GetProvider() == cloud.ClusterRedisProviderV7 {
 		return getClusterRedisQueueServiceV7(queueOrTopicSubName, option)
+	} else if option.GetProvider() == cloud.AliCloudMNSQueueProvider {
+		return getAliMNSQueueService(queueOrTopicSubName, option)
 	}
 	return nil, cloud.ErrUnsupportedCloudProvider
 }
