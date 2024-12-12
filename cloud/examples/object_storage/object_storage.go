@@ -58,7 +58,7 @@ func main() {
 }
 
 func object_storage_examples(option object_storage.ObjectStorageOption) {
-	service, err := object_storage.GetObjectStorageServiceWithObjectStorageOption(option)
+	service, err := object_storage.GetObjectStorageServiceWithOption(option)
 	if err != nil {
 		fmt.Printf("GetObjectStorageService error:%s\n", err)
 		return

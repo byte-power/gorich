@@ -104,7 +104,7 @@ func main() {
 }
 
 func queue_examples(option queue.QueueOption) {
-	service, err := queue.GetQueueServiceWithQueueOption(option)
+	service, err := queue.GetQueueServiceWithOption(option)
 	if err != nil {
 		fmt.Printf("get queue service error %s %+v %s\n", option.QueueName, option, err)
 		return
@@ -159,7 +159,7 @@ func queue_examples(option queue.QueueOption) {
 
 // The following examples show mns queue specific examples: How to set message priority; how to set long polling period seconds.
 func alicloud_mns_queue_examples(option queue.QueueOption) {
-	service, err := queue.GetQueueServiceWithQueueOption(option)
+	service, err := queue.GetQueueServiceWithOption(option)
 	if err != nil {
 		fmt.Printf("get queue service error %s %+v %s\n", option.QueueName, option, err)
 		return

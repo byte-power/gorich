@@ -72,7 +72,7 @@ func (object Object) GetContentType() string {
 	return object.contentType
 }
 
-// GetObjectStorageService is deprecated, use GetObjectStorageServiceWithObjectStorageOption instead.
+// GetObjectStorageService is deprecated, use GetObjectStorageServiceWithOption instead.
 func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
 	if option.GetProvider() == cloud.TencentCloudProvider {
 		return GetTencentCloudObjectService(bucketName, option)
@@ -99,7 +99,7 @@ func (option ObjectStorageOption) Check() error {
 	return nil
 }
 
-func GetObjectStorageServiceWithObjectStorageOption(option ObjectStorageOption) (ObjectStorageService, error) {
+func GetObjectStorageServiceWithOption(option ObjectStorageOption) (ObjectStorageService, error) {
 	if err := option.Check(); err != nil {
 		return nil, err
 	}

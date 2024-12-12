@@ -28,7 +28,7 @@ type Message interface {
 	Body() string
 }
 
-// GetQueueService is deprecated, use GetQueueServiceWithQueueOption instead.
+// GetQueueService is deprecated, use GetQueueServiceWithOption instead.
 func GetQueueService(queueOrTopicSubName string, option cloud.Option) (QueueService, error) {
 	if option.GetProvider() == cloud.TencentCloudProvider {
 		return GetTencentCloudQueueService(queueOrTopicSubName, option)
@@ -69,7 +69,7 @@ func (option QueueOption) Check() error {
 	return nil
 }
 
-func GetQueueServiceWithQueueOption(option QueueOption) (QueueService, error) {
+func GetQueueServiceWithOption(option QueueOption) (QueueService, error) {
 	if err := option.Check(); err != nil {
 		return nil, err
 	}
