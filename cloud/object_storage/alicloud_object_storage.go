@@ -25,13 +25,13 @@ var (
 )
 
 type AliCloudStorageOption struct {
-	CredentialType string // eg: "oidc_role_arn" or "ak"
-	EndPoint       string // eg: "oss-cn-zhangjiakou.aliyuncs.com"
-	SessionName    string // eg: "test-rrsa-oidc-token"
+	CredentialType string `yaml:"credential_type" json:"credential_type"` // eg: "oidc_role_arn" or "ak"
+	EndPoint       string `yaml:"endpoint" json:"endpoint"`               // eg: "oss-cn-zhangjiakou.aliyuncs.com"
+	SessionName    string `yaml:"session_name" json:"session_name"`       // eg: "test-rrsa-oidc-token"
 
 	// "ak" required
-	AccessKeyID     string
-	AccessKeySecret string
+	AccessKeyID     string `yaml:"access_key_id" json:"access_key_id"`
+	AccessKeySecret string `yaml:"access_key_secret" json:"access_key_secret"`
 }
 
 func (option AliCloudStorageOption) GetProvider() cloud.Provider {

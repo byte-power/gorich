@@ -2,8 +2,9 @@ package queue
 
 import (
 	"errors"
-	"github.com/byte-power/gorich/cloud"
 	"time"
+
+	"github.com/byte-power/gorich/cloud"
 )
 
 var (
@@ -16,20 +17,20 @@ var (
 // StandaloneRedisQueueOption 用于 Redis Standalone 实例
 
 type StandaloneRedisQueueOption struct {
-	Addr         string
-	Password     string
-	DB           *int
-	MaxRetries   *int
-	PoolSize     *int
-	DialTimeout  *time.Duration
-	ReadTimeout  *time.Duration
-	WriteTimeout *time.Duration
-	MinIdleConns *int
+	Addr         string         `json:"addr" yaml:"addr"`
+	Password     string         `json:"password" yaml:"password"`
+	DB           *int           `json:"db" yaml:"db"`
+	MaxRetries   *int           `json:"max_retries" yaml:"max_retries"`
+	PoolSize     *int           `json:"pool_size" yaml:"pool_size"`
+	DialTimeout  *time.Duration `json:"dial_timeout" yaml:"dial_timeout"`
+	ReadTimeout  *time.Duration `json:"read_timeout" yaml:"read_timeout"`
+	WriteTimeout *time.Duration `json:"write_timeout" yaml:"write_timeout"`
+	MinIdleConns *int           `json:"min_idle_conns" yaml:"min_idle_conns"`
 
 	// queue
-	ConsumerGroup string
-	Idle          int
-	GlobalIdle    int
+	ConsumerGroup string `json:"consumer_group" yaml:"consumer_group"`
+	Idle          int    `json:"idle" yaml:"idle"`
+	GlobalIdle    int    `json:"global_idle" yaml:"global_idle"`
 }
 
 func (option StandaloneRedisQueueOption) GetProvider() cloud.Provider {
@@ -89,23 +90,24 @@ func (option StandaloneRedisQueueOption) check() error {
 // ClusterRedisQueueOption 用于 Redis Cluster 集群
 
 type ClusterRedisQueueOption struct {
-	Addrs           []string
-	Password        string
-	DB              *int
-	MaxRetries      *int
-	PoolSize        *int
-	DialTimeout     *time.Duration
-	ReadTimeout     *time.Duration
-	WriteTimeout    *time.Duration
-	MinIdleConns    *int
-	MaxIdleConns    *int
-	ConnMaxIdleTime *time.Duration
-	ConnMaxLifetime *time.Duration
+	// redis cluster
+	Addrs           []string       `json:"addrs" yaml:"addrs"`
+	Password        string         `json:"password" yaml:"password"`
+	DB              *int           `json:"db" yaml:"db"`
+	MaxRetries      *int           `json:"max_retries" yaml:"max_retries"`
+	PoolSize        *int           `json:"pool_size" yaml:"pool_size"`
+	DialTimeout     *time.Duration `json:"dial_timeout" yaml:"dial_timeout"`
+	ReadTimeout     *time.Duration `json:"read_timeout" yaml:"read_timeout"`
+	WriteTimeout    *time.Duration `json:"write_timeout" yaml:"write_timeout"`
+	MinIdleConns    *int           `json:"min_idle_conns" yaml:"min_idle_conns"`
+	MaxIdleConns    *int           `json:"max_idle_conns" yaml:"max_idle_conns"`
+	ConnMaxIdleTime *time.Duration `json:"conn_max_idle_time" yaml:"conn_max_idle_time"`
+	ConnMaxLifetime *time.Duration `json:"conn_max_lifetime" yaml:"conn_max_lifetime"`
 
 	// queue
-	ConsumerGroup string
-	Idle          int
-	GlobalIdle    int
+	ConsumerGroup string `json:"consumer_group" yaml:"consumer_group"`
+	Idle          int    `json:"idle" yaml:"idle"`
+	GlobalIdle    int    `json:"global_idle" yaml:"global_idle"`
 }
 
 func (option ClusterRedisQueueOption) GetProvider() cloud.Provider {

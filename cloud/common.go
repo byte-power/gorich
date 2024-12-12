@@ -2,7 +2,6 @@ package cloud
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -13,14 +12,17 @@ import (
 type Provider string
 
 const (
-	AWSProvider               Provider = "aws"
-	TencentCloudProvider      Provider = "tencentcloud"
+	AWSProvider          Provider = "aws"
+	TencentCloudProvider Provider = "tencentcloud"
+	AliCloudProvider     Provider = "alicloud"
+
 	StandaloneRedisProvider   Provider = "standalone_redis"
 	ClusterRedisProvider      Provider = "cluster_redis"
 	StandaloneRedisProviderV7 Provider = "standalone_redis_v7"
 	ClusterRedisProviderV7    Provider = "cluster_redis_v7"
-	AliCloudStorageProvider   Provider = "alicloud_storage"
-	AliCloudMNSQueueProvider  Provider = "alicloud_mns_queue"
+
+	// AliCloudStorageProvider is deprecated, use AliCloudProvider instead.
+	AliCloudStorageProvider Provider = "alicloud_storage"
 )
 
 type AliCloudCredentialType string
@@ -41,7 +43,7 @@ const (
 )
 
 var (
-	ErrUnsupportedCloudProvider   = fmt.Errorf("unsupported provider, only support %s, %s and %s", AWSProvider, TencentCloudProvider, StandaloneRedisProvider)
+	ErrUnsupportedCloudProvider   = errors.New("unsupported provider")
 	ErrProviderNotTencentCloud    = errors.New("provider is not tencentcloud")
 	ErrProviderNotAWS             = errors.New("provider is not aws")
 	ErrProviderNotStandaloneRedis = errors.New("provider is not standalone redis")
@@ -66,13 +68,35 @@ type Option interface {
 	CheckAliCloudStorage() error
 }
 
+type CommonCloudOption struct {
+	SecretID      string `json:"secret_id" yaml:"secret_id"`
+	SecretKey     string `json:"secret_key" yaml:"secret_key"`
+	AssumeRoleArn string `json:"assume_role_arn" yaml:"assume_role_arn"`
+	Region        string `json:"region" yaml:"region"`
+	AssumeRegion  string `json:"assume_region" yaml:"assume_region"`
+}
+
+type AWSOption CommonCloudOption
+
+func (option AWSOption) Check() error {
+	if option.Region == "" {
+		return ErrEmptyRegion
+	}
+	validKeyConfig := option.SecretID != "" && option.SecretKey != ""
+	validAssumeRoleConfig := option.AssumeRoleArn != "" && option.AssumeRegion != ""
+	if !validKeyConfig && !validAssumeRoleConfig {
+		return errors.New("must have valid key pairs config or assume role config")
+	}
+	return nil
+}
+
 type CommonOption struct {
-	Provider      Provider
-	SecretID      string
-	SecretKey     string
-	AssumeRoleArn string
-	Region        string
-	AssumeRegion  string
+	Provider      Provider `json:"provider" yaml:"provider"`
+	SecretID      string   `json:"secret_id" yaml:"secret_id"`
+	SecretKey     string   `json:"secret_key" yaml:"secret_key"`
+	AssumeRoleArn string   `json:"assume_role_arn" yaml:"assume_role_arn"`
+	Region        string   `json:"region" yaml:"region"`
+	AssumeRegion  string   `json:"assume_region" yaml:"assume_region"`
 }
 
 func (option CommonOption) GetProvider() Provider {
@@ -134,7 +158,7 @@ func (option CommonOption) CheckTencentCloud() error {
 }
 
 func (option CommonOption) CheckAliCloudStorage() error {
-	if option.Provider != AliCloudStorageProvider {
+	if option.Provider != AliCloudStorageProvider && option.Provider != AliCloudProvider {
 		return ErrProviderNotAliCloudStorage
 	}
 	return option.check()
@@ -170,6 +194,31 @@ func AwsNewSession(option Option) (*session.Session, *aws.Config, error) {
 	if roleArn := option.GetAssumeRoleArn(); roleArn != "" { // 切换 assumeRole
 		assumeRoleCreds := stscreds.NewCredentials(sess, roleArn)
 		return sess, aws.NewConfig().WithCredentials(assumeRoleCreds).WithRegion(option.GetAssumeRegion()), nil
+	}
+	return sess, nil, nil
+}
+
+func AwsNewSessionWithOption(option AWSOption) (*session.Session, *aws.Config, error) {
+	var creds *credentials.Credentials
+	if option.SecretID != "" && option.SecretKey != "" {
+		creds = credentials.NewStaticCredentials(option.SecretID, option.SecretKey, "")
+	}
+
+	sess, err := session.NewSessionWithOptions(session.Options{
+		Config: aws.Config{
+			CredentialsChainVerboseErrors: aws.Bool(true),
+			Credentials:                   creds, // 可能是nil
+			// LogLevel:                      aws.LogLevel(aws.LogDebug),
+			Region: aws.String(option.Region),
+		},
+		SharedConfigFiles: []string{},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if roleArn := option.AssumeRoleArn; roleArn != "" { // 切换 assumeRole
+		assumeRoleCreds := stscreds.NewCredentials(sess, roleArn)
+		return sess, aws.NewConfig().WithCredentials(assumeRoleCreds).WithRegion(option.AssumeRegion), nil
 	}
 	return sess, nil, nil
 }

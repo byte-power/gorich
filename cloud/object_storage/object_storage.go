@@ -3,12 +3,13 @@ package object_storage
 import (
 	"context"
 	"errors"
-	"github.com/aliyun/aliyun-oss-go-sdk/oss"
-	"github.com/tencentyun/cos-go-sdk-v5"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/tencentyun/cos-go-sdk-v5"
 
 	"github.com/byte-power/gorich/cloud"
 )
@@ -71,6 +72,7 @@ func (object Object) GetContentType() string {
 	return object.contentType
 }
 
+// GetObjectStorageService is deprecated, use GetObjectStorageServiceWithObjectStorageOption instead.
 func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
 	if option.GetProvider() == cloud.TencentCloudProvider {
 		return GetTencentCloudObjectService(bucketName, option)
@@ -80,6 +82,37 @@ func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStor
 		return GetAliCloudObjectService(bucketName, option)
 	}
 	return nil, cloud.ErrUnsupportedCloudProvider
+}
+
+type ObjectStorageOption struct {
+	Provider cloud.Provider        `json:"provider" yaml:"provider"`
+	Bucket   string                `json:"bucket" yaml:"bucket"`
+	S3       cloud.AWSOption       `json:"s3" yaml:"s3"`
+	OSS      AliCloudStorageOption `json:"oss" yaml:"oss"`
+	COS      COSOption             `json:"cos" yaml:"cos"`
+}
+
+func (option ObjectStorageOption) Check() error {
+	if option.Bucket == "" {
+		return ErrBucketNameEmpty
+	}
+	return nil
+}
+
+func GetObjectStorageServiceWithObjectStorageOption(option ObjectStorageOption) (ObjectStorageService, error) {
+	if err := option.Check(); err != nil {
+		return nil, err
+	}
+	switch option.Provider {
+	case cloud.AWSProvider:
+		return getAWSObjectService(option.Bucket, option.S3)
+	case cloud.AliCloudProvider:
+		return GetAliCloudObjectService(option.Bucket, option.OSS)
+	case cloud.TencentCloudProvider:
+		return getTencentCloudObjectService(option.Bucket, option.COS)
+	default:
+		return nil, cloud.ErrUnsupportedCloudProvider
+	}
 }
 
 type PutHeaderOption struct {

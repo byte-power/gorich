@@ -25,6 +25,35 @@ type AWSQueueService struct {
 
 var ErrAWSQueueNameEmpty = errors.New("aws queue name is empty")
 
+func getAWSQueueService(queueName string, option cloud.AWSOption) (QueueService, error) {
+	if queueName == "" {
+		return nil, ErrAWSQueueNameEmpty
+	}
+	if err := option.Check(); err != nil {
+		return nil, err
+	}
+
+	sess, cfg, err := cloud.AwsNewSessionWithOption(option)
+	if err != nil {
+		return nil, err
+	}
+	var client *sqs.SQS
+	// Assume the specified role
+	if cfg != nil {
+		client = sqs.New(sess, cfg)
+	} else {
+		client = sqs.New(sess)
+	}
+
+	input := &sqs.GetQueueUrlInput{QueueName: aws.String(queueName)}
+	output, err := client.GetQueueUrl(input)
+	if err != nil {
+		return nil, err
+	}
+	return &AWSQueueService{client: client, queueURL: aws.StringValue(output.QueueUrl)}, nil
+}
+
+// GetAWSQueueService is deprecated, use getAWSQueueService instead.
 func GetAWSQueueService(queueName string, option cloud.Option) (QueueService, error) {
 	if queueName == "" {
 		return nil, ErrAWSQueueNameEmpty

@@ -19,8 +19,8 @@ var (
 )
 
 type TencentCloudQueueOption struct {
-	Token string
-	URL   string
+	Token string `json:"token" yaml:"token"`
+	URL   string `json:"url" yaml:"url"`
 }
 
 func (option TencentCloudQueueOption) GetProvider() cloud.Provider {

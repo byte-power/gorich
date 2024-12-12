@@ -5,11 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
 	"io"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/aws/aws-sdk-go/aws"
 
 	"github.com/byte-power/gorich/cloud"
 	"github.com/byte-power/gorich/cloud/object_storage"
@@ -17,37 +18,47 @@ import (
 
 // Configure secret_id, secret_key, region and bucket_name to run this example.
 func main() {
-	optionForTencentCloud := cloud.CommonOption{
-		Provider:  cloud.TencentCloudProvider,
-		SecretID:  "tencentcloud_secret_id_xxx",
-		SecretKey: "tencentcloud_secret_key_xxx",
-		Region:    "tencentcloud_region_xxx",
+	option := object_storage.ObjectStorageOption{
+		Provider: cloud.TencentCloudProvider,
+		Bucket:   "tencent_bucket_name_xxx",
+		COS: object_storage.COSOption{
+			SecretID:  "tencentcloud_secret_id_xxx",
+			SecretKey: "tencentcloud_secret_key_xxx",
+			Region:    "tencentcloud_region_xxx",
+		},
 	}
-	object_storage_examples("tencentcloud_bucket_name_xxx", optionForTencentCloud)
+	object_storage_examples(option)
 
-	optionForAWS := cloud.CommonOption{
-		Provider:  cloud.AWSProvider,
-		SecretID:  "aws_secret_id_xxx",
-		SecretKey: "aws_secret_key_xxx",
-		Region:    "aws_region_xxx",
+	option = object_storage.ObjectStorageOption{
+		Provider: cloud.AWSProvider,
+		Bucket:   "aws_bucket_name_xxx",
+		S3: cloud.AWSOption{
+			SecretID:  "aws_secret_id_xxx",
+			SecretKey: "aws_secret_key_xxx",
+			Region:    "aws_region_xxx",
+		},
 	}
-	object_storage_examples("aws_bucket_name_xxx", optionForAWS)
+	object_storage_examples(option)
 
-	optionForAliOSS := object_storage.AliCloudStorageOption{
-		//CredentialType: "oidc_role_arn",
-		//EndPoint:       "oss-cn-zhangjiakou.aliyuncs.com",
-		//SessionName:    "test-rrsa-oidc-token",
+	option = object_storage.ObjectStorageOption{
+		Provider: cloud.AliCloudProvider,
+		Bucket:   "alicloud_bucket_name_xxx",
+		OSS: object_storage.AliCloudStorageOption{
+			//CredentialType: "oidc_role_arn",
+			//EndPoint:       "oss-cn-zhangjiakou.aliyuncs.com",
+			//SessionName:    "test-rrsa-oidc-token",
 
-		CredentialType:  "ak",
-		EndPoint:        "oss-cn-beijing.aliyuncs.com",
-		AccessKeyID:     "alicloud_access_key_id_xxx",
-		AccessKeySecret: "alicloud_access_key_secret_xxx",
+			CredentialType:  "ak",
+			EndPoint:        "oss-cn-beijing.aliyuncs.com",
+			AccessKeyID:     "alicloud_access_key_id_xxx",
+			AccessKeySecret: "alicloud_access_key_secret_xxx",
+		},
 	}
-	object_storage_examples("alicloud_bucket_name_xxx", optionForAliOSS)
+	object_storage_examples(option)
 }
 
-func object_storage_examples(bucketName string, option cloud.Option) {
-	service, err := object_storage.GetObjectStorageService(bucketName, option)
+func object_storage_examples(option object_storage.ObjectStorageOption) {
+	service, err := object_storage.GetObjectStorageServiceWithObjectStorageOption(option)
 	if err != nil {
 		fmt.Printf("GetObjectStorageService error:%s\n", err)
 		return

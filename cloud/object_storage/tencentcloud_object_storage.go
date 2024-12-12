@@ -35,6 +35,47 @@ type TencentCloudObjectStorageService struct {
 	client *cos.Client
 }
 
+type COSOption cloud.CommonCloudOption
+
+func (option COSOption) Check() error {
+	if option.Region == "" {
+		return cloud.ErrEmptyRegion
+	}
+	if option.SecretID == "" {
+		return cloud.ErrEmptySecretID
+	}
+	if option.SecretKey == "" {
+		return cloud.ErrEmptySecretKey
+	}
+	return nil
+}
+
+func getTencentCloudObjectService(bucketName string, option COSOption) (ObjectStorageService, error) {
+	if bucketName == "" {
+		return nil, ErrBucketNameEmpty
+	}
+	if err := option.Check(); err != nil {
+		return nil, err
+	}
+	bucketURL, err := getTencentCloudBucketURL(bucketName, option.Region)
+	if err != nil {
+		return nil, err
+	}
+	serviceURL, err := getTencentCloudServiceURL(option.Region)
+	if err != nil {
+		return nil, err
+	}
+	baseURL := &cos.BaseURL{BucketURL: bucketURL, ServiceURL: serviceURL}
+	client := cos.NewClient(baseURL, &http.Client{
+		Transport: &cos.AuthorizationTransport{
+			SecretID:  option.SecretID,
+			SecretKey: option.SecretKey,
+		},
+	})
+	return &TencentCloudObjectStorageService{client: client}, nil
+}
+
+// GetTencentCloudObjectService is deprecated, use getTencentCloudObjectService instead.
 func GetTencentCloudObjectService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
 	if bucketName == "" {
 		return nil, ErrBucketNameEmpty
