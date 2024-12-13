@@ -199,6 +199,9 @@ func AwsNewSession(option Option) (*session.Session, *aws.Config, error) {
 }
 
 func AwsNewSessionWithOption(option AWSOption) (*session.Session, *aws.Config, error) {
+	if err := option.Check(); err != nil {
+		return nil, nil, err
+	}
 	var creds *credentials.Credentials
 	if option.SecretID != "" && option.SecretKey != "" {
 		creds = credentials.NewStaticCredentials(option.SecretID, option.SecretKey, "")

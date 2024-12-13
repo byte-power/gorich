@@ -85,11 +85,14 @@ func GetObjectStorageService(bucketName string, option cloud.Option) (ObjectStor
 }
 
 type ObjectStorageOption struct {
-	Provider cloud.Provider        `json:"provider" yaml:"provider"`
-	Bucket   string                `json:"bucket" yaml:"bucket"`
-	S3       cloud.AWSOption       `json:"s3" yaml:"s3"`
-	OSS      AliCloudStorageOption `json:"oss" yaml:"oss"`
-	COS      COSOption             `json:"cos" yaml:"cos"`
+	Provider cloud.Provider `json:"provider" yaml:"provider"`
+	Bucket   string         `json:"bucket" yaml:"bucket"`
+	// Path is not used currently.
+	Path string `json:"path" yaml:"path"`
+
+	S3  cloud.AWSOption       `json:"s3" yaml:"s3"`
+	OSS AliCloudStorageOption `json:"oss" yaml:"oss"`
+	COS COSOption             `json:"cos" yaml:"cos"`
 }
 
 func (option ObjectStorageOption) Check() error {
