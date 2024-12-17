@@ -19,6 +19,28 @@ type AWSObjectStorageService struct {
 	bucketName string
 }
 
+func getAWSObjectService(bucketName string, option cloud.AWSOption) (ObjectStorageService, error) {
+	if bucketName == "" {
+		return nil, ErrBucketNameEmpty
+	}
+	if err := option.Check(); err != nil {
+		return nil, err
+	}
+	sess, cfg, err := cloud.AwsNewSessionWithOption(option)
+	if err != nil {
+		return nil, err
+	}
+	var client *s3.S3
+	// Assume the specified role
+	if cfg != nil {
+		client = s3.New(sess, cfg)
+	} else {
+		client = s3.New(sess)
+	}
+	return &AWSObjectStorageService{client: client, bucketName: bucketName}, nil
+}
+
+// GetAWSObjectService is deprecated, use getAWSObjectService instead.
 func GetAWSObjectService(bucketName string, option cloud.Option) (ObjectStorageService, error) {
 	if bucketName == "" {
 		return nil, ErrBucketNameEmpty

@@ -41,13 +41,14 @@ type AliMNSQueueService struct {
 }
 
 type AliMNSClientOption struct {
-	EndPoint        string `json:"endpoint"`
-	TimeoutSecond   int64  `json:"timeout_second"`
-	MaxConnsPerHost int    `json:"max_conns_per_host"`
-	QueueQPS        int32  `json:"queue_qps"`
+	EndPoint        string `json:"endpoint" yaml:"endpoint"`
+	TimeoutSecond   int64  `json:"timeout_second" yaml:"timeout_second"`
+	MaxConnsPerHost int    `json:"max_conns_per_host" yaml:"max_conns_per_host"`
+	QueueQPS        int32  `json:"queue_qps" yaml:"queue_qps"`
+
 	// MessagePriority is used to set message priority when sending messages.
 	// message priority can also be set in ctx parameter when calling Producer's SendMessage method.
-	MessagePriority int `json:"message_priority"`
+	MessagePriority int `json:"message_priority" yaml:"message_priority"`
 
 	// ReceiveMessageLongPollingWaitSeconds is used to set long polling wait seconds.
 	// ReceiveMessages will wait at most `ReceiveMessageLongPollingWaitSeconds` seconds before return
@@ -57,27 +58,27 @@ type AliMNSClientOption struct {
 	// 2. value set in option (i.e. here)
 	// 3. queue's long polling period configuration
 	// If want to disable long polling, do not set the above 3 configurations.
-	ReceiveMessageLongPollingWaitSeconds int `json:"receive_message_long_polling_wait_seconds"`
+	ReceiveMessageLongPollingWaitSeconds int `json:"receive_message_long_polling_wait_seconds" yaml:"receive_message_long_polling_wait_seconds"`
 
-	CredentialType cloud.AliCloudCredentialType `json:"credential_type"`
+	CredentialType cloud.AliCloudCredentialType `json:"credential_type" yaml:"credential_type"`
 
 	// required when CredentialType is AliCloudAccessKeyCredentialType, get from env if not provided
-	AccessKeyId     string `json:"access_key_id"`
-	AccessKeySecret string `json:"access_key_secret"`
+	AccessKeyId     string `json:"access_key_id" yaml:"access_key_id"`
+	AccessKeySecret string `json:"access_key_secret" yaml:"access_key_secret"`
 
 	// optional when CredentialType is AliCloudECSRamRoleCredentialType
-	RoleName string `json:"role_name"`
+	RoleName string `json:"role_name" yaml:"role_name"`
 
 	// required when CredentialType is AliCloudOIDCRoleARNCredentialType, get from env if not provided
-	RoleArn           string `json:"role_arn"`
-	OIDCProviderArn   string `json:"oidc_provider_arn"`
-	OIDCTokenFilePath string `json:"oidc_token_file_path"`
+	RoleArn           string `json:"role_arn" yaml:"role_arn"`
+	OIDCProviderArn   string `json:"oidc_provider_arn" yaml:"oidc_provider_arn"`
+	OIDCTokenFilePath string `json:"oidc_token_file_path" yaml:"oidc_token_file_path"`
 
 	// optional when CredentialType is AliCloudOIDCRoleARNCredentialType
 	// RoleSessionName will get from env if not provided
-	RoleSessionName       string `json:"role_session_name"`
-	Policy                string `json:"policy"`
-	RoleSessionExpiration int    `json:"role_session_expiration"`
+	RoleSessionName       string `json:"role_session_name" yaml:"role_session_name"`
+	Policy                string `json:"policy" yaml:"policy"`
+	RoleSessionExpiration int    `json:"role_session_expiration" yaml:"role_session_expiration"`
 
 	region string
 }
@@ -130,7 +131,7 @@ func (option AliMNSClientOption) check() error {
 }
 
 func (option AliMNSClientOption) GetProvider() cloud.Provider {
-	return cloud.AliCloudMNSQueueProvider
+	return cloud.AliCloudProvider
 }
 
 func (option AliMNSClientOption) GetSecretID() string {

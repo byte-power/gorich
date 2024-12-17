@@ -14,86 +14,99 @@ import (
 // Configure secret_id, secret_key, region, and queue_name to run this example.
 func main() {
 
-	// Redis 单节点
-	//optionForBaseRedis := queue.StandaloneRedisQueueOption{
-	//	Addr:              "localhost:6379",
-	//	Password:          "",
-	//	ConsumerGroup: "save_task_consumer_group",
-	//	Idle:              10,
-	//}
-
-	// Redis 集群
-	optionForBaseRedis := queue.ClusterRedisQueueOption{
-		Addrs: []string{
-			"localhost:7000",
-			"localhost:7001",
-			"localhost:7002",
-			"localhost:7003",
-			"localhost:7004",
-			"localhost:7005",
-		},
-		Password:      "",
-		ConsumerGroup: "save_task_consumer_group",
-		Idle:          10,
-	}
-
-	queue_examples("test_queue_name", optionForBaseRedis)
-
-	optionForTencentCloud := queue.TencentCloudQueueOption{
-		Token: "access_jwt_token_xxx",
-		URL:   "http://pulsar-xxxxxxxxx.tdmq.ap-gz.public.tencenttdmq.com:8080",
-	}
-	topicName := "pulsar-xxxxxx/namespace_name/topic_name"
-	subscriptionName := "subscription_name"
-	topicSub := queue.GenerateTopicAndSubName(topicName, subscriptionName)
-	queue_examples(topicSub, optionForTencentCloud)
-
-	optionForAWS := cloud.CommonOption{
-		Provider:  cloud.AWSProvider,
-		SecretID:  "aws_secret_id_xxxx",
-		SecretKey: "aws_secret_key_xxxx",
-		Region:    "aws_region_xxx",
-	}
-	queue_examples("aws_queue_name", optionForAWS)
-
-	dialTimeout := 5 * time.Second
-	clusterRedisQueueOptionV7 := queue.ClusterRedisQueueOptionV7{
-		ClusterRedisQueueOption: queue.ClusterRedisQueueOption{
+	option := queue.QueueOption{
+		Provider:  cloud.ClusterRedisProvider,
+		QueueName: "test_queue_name",
+		ClusterRedis: queue.ClusterRedisQueueOption{
 			Addrs: []string{
-				"localhost:30001",
-				"localhost:30002",
-				"localhost:30003",
+				"localhost:7000",
+				"localhost:7001",
+				"localhost:7002",
+				"localhost:7003",
+				"localhost:7004",
+				"localhost:7005",
 			},
-			ConsumerGroup: "save_task_consumer_group_2",
-			DialTimeout:   &dialTimeout,
+			Password:      "",
+			ConsumerGroup: "save_task_consumer_group",
 			Idle:          10,
 		},
 	}
-	queue_examples("redis_cluster_queue_v7", clusterRedisQueueOptionV7)
+	queue_examples(option)
+
+	topicName := "pulsar-xxxxxx/namespace_name/topic_name"
+	subscriptionName := "subscription_name"
+	topicSub := queue.GenerateTopicAndSubName(topicName, subscriptionName)
+	option = queue.QueueOption{
+		Provider:  cloud.TencentCloudProvider,
+		QueueName: topicSub,
+		Pulsar: queue.TencentCloudQueueOption{
+			Token: "access_jwt_token_xxx",
+			URL:   "http://pulsar-xxxxxxxxx.tdmq.ap-gz.public.tencenttdmq.com:8080",
+		},
+	}
+	queue_examples(option)
+
+	option = queue.QueueOption{
+		Provider:  cloud.AWSProvider,
+		QueueName: "aws_queue_name",
+		SQS: cloud.AWSOption{
+			SecretID:  "aws_secret_id_xxxx",
+			SecretKey: "aws_secret_key_xxxx",
+			Region:    "aws_region_xxx",
+		},
+	}
+
+	queue_examples(option)
+
+	dialTimeout := 5 * time.Second
+	option = queue.QueueOption{
+		Provider:  cloud.ClusterRedisProviderV7,
+		QueueName: "redis_cluster_queue_v7",
+		ClusterRedisV7: queue.ClusterRedisQueueOptionV7{
+			ClusterRedisQueueOption: queue.ClusterRedisQueueOption{
+				Addrs: []string{
+					"localhost:30001",
+					"localhost:30002",
+					"localhost:30003",
+				},
+				ConsumerGroup: "save_task_consumer_group_2",
+				DialTimeout:   &dialTimeout,
+				Idle:          10,
+			},
+		},
+	}
+	queue_examples(option)
 
 	// alicloud MNS queue: access_key CredentialType
-	mnsQueueOption := queue.AliMNSClientOption{
-		EndPoint:        "http://account-id.mns.region.aliyuncs.com",
-		CredentialType:  cloud.AliCloudAccessKeyCredentialType,
-		AccessKeyId:     "alicloud_access_key_id",
-		AccessKeySecret: "alicloud_access_key_secret",
-		MessagePriority: 10,
+	option = queue.QueueOption{
+		Provider:  cloud.AliCloudProvider,
+		QueueName: "mns_queue_name",
+		MNS: queue.AliMNSClientOption{
+			EndPoint:        "http://account-id.mns.region.aliyuncs.com",
+			CredentialType:  cloud.AliCloudAccessKeyCredentialType,
+			AccessKeyId:     "alicloud_access_key_id",
+			AccessKeySecret: "alicloud_access_key_secret",
+			MessagePriority: 10,
+		},
 	}
-	queue_examples("mns_queue_name", mnsQueueOption)
+	queue_examples(option)
 
 	// alicloud MNS queue: ecs_ram_role credentialType
-	mnsQueueOption = queue.AliMNSClientOption{
-		EndPoint:       "http://account-id.mns.region.aliyuncs.com",
-		CredentialType: cloud.AliCloudECSRamRoleCredentialType,
-	}
-	queue_examples("mns_queue_name", mnsQueueOption)
-	alicloud_mns_queue_examples("mns_queue_name", mnsQueueOption)
+	option = queue.QueueOption{
+		Provider:  cloud.AliCloudProvider,
+		QueueName: "mns_queue_name",
+		MNS: queue.AliMNSClientOption{
+			EndPoint:       "http://account-id.mns.region.aliyuncs.com",
+			CredentialType: cloud.AliCloudECSRamRoleCredentialType,
+		}}
+	queue_examples(option)
+	alicloud_mns_queue_examples(option)
 }
 
-func queue_examples(queueOrTopicName string, option cloud.Option) {
-	service, err := queue.GetQueueService(queueOrTopicName, option)
+func queue_examples(option queue.QueueOption) {
+	service, err := queue.GetQueueServiceWithOption(option)
 	if err != nil {
-		fmt.Printf("get queue service error %s %+v %s\n", queueOrTopicName, option, err)
+		fmt.Printf("get queue service error %s %+v %s\n", option.QueueName, option, err)
 		return
 	}
 	defer service.Close()
@@ -145,10 +158,10 @@ func queue_examples(queueOrTopicName string, option cloud.Option) {
 }
 
 // The following examples show mns queue specific examples: How to set message priority; how to set long polling period seconds.
-func alicloud_mns_queue_examples(queueOrTopicName string, option cloud.Option) {
-	service, err := queue.GetQueueService(queueOrTopicName, option)
+func alicloud_mns_queue_examples(option queue.QueueOption) {
+	service, err := queue.GetQueueServiceWithOption(option)
 	if err != nil {
-		fmt.Printf("get queue service error %s %+v %s\n", queueOrTopicName, option, err)
+		fmt.Printf("get queue service error %s %+v %s\n", option.QueueName, option, err)
 		return
 	}
 	defer service.Close()
