@@ -84,10 +84,11 @@ func (option AWSOption) Check() error {
 	}
 	validKeyConfig := option.SecretID != "" && option.SecretKey != ""
 	validAssumeRoleConfig := option.AssumeRoleArn != "" && option.AssumeRegion != ""
-	if !validKeyConfig && !validAssumeRoleConfig {
-		return errors.New("must have valid key pairs config or assume role config")
+	validInstanceRoleConfig := option.AssumeRoleArn == "" && option.AssumeRegion == "" && option.SecretID == "" && option.SecretKey == ""
+	if validKeyConfig || validAssumeRoleConfig || validInstanceRoleConfig {
+		return nil
 	}
-	return nil
+	return errors.New("must have valid key pairs config or assume role config")
 }
 
 type CommonOption struct {
