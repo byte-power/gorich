@@ -325,6 +325,20 @@ func (service *AliCloudObjectStorageService) DeleteObjects(ctx context.Context, 
 	return err
 }
 
+func (service *AliCloudObjectStorageService) CopyObject(ctx context.Context, from, to string) error {
+	if from == "" || to == "" {
+		return ErrObjectKeyEmpty
+	}
+	bucket, err := service.client.Bucket(service.bucketName)
+	if err != nil {
+		return err
+	}
+	if _, err := bucket.CopyObject(from, to); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (service *AliCloudObjectStorageService) GetSignedURL(key string, duration time.Duration) (string, error) {
 	if key == "" {
 		return "", ErrObjectKeyEmpty
