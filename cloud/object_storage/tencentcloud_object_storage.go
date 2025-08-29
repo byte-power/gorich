@@ -272,6 +272,14 @@ func (service *TencentCloudObjectStorageService) DeleteObjects(ctx context.Conte
 	return err
 }
 
+func (service *TencentCloudObjectStorageService) CopyObject(ctx context.Context, from, to string) error {
+	if from == "" || to == "" {
+		return ErrObjectKeyEmpty
+	}
+	_, _, err := service.client.Object.Copy(ctx, to, from, nil)
+	return err
+}
+
 func (service *TencentCloudObjectStorageService) GetSignedURL(key string, duration time.Duration) (string, error) {
 	if key == "" {
 		return "", ErrObjectKeyEmpty

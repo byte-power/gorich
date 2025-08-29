@@ -200,6 +200,18 @@ func (service *AWSObjectStorageService) DeleteObjects(ctx context.Context, keys 
 	return err
 }
 
+func (service *AWSObjectStorageService) CopyObject(ctx context.Context, from, to string) error {
+	if from == "" || to == "" {
+		return ErrObjectKeyEmpty
+	}
+	_, err := service.client.CopyObjectWithContext(ctx, &s3.CopyObjectInput{
+		Bucket:     aws.String(service.bucketName),
+		CopySource: aws.String(from),
+		Key:        aws.String(to),
+	})
+	return err
+}
+
 func (service *AWSObjectStorageService) GetSignedURL(key string, duration time.Duration) (string, error) {
 	if key == "" {
 		return "", ErrObjectKeyEmpty

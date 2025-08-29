@@ -27,6 +27,7 @@ type ObjectStorageService interface {
 	PutObject(ctx context.Context, key string, input *PutObjectInput) error
 	DeleteObject(ctx context.Context, key string) error
 	DeleteObjects(ctx context.Context, keys ...string) error
+	CopyObject(ctx context.Context, from, to string) error
 	GetSignedURL(key string, duration time.Duration) (string, error)
 	// GetSignedURLForExistedKey generates signed url if key exists. If key does not exist, return error
 	GetSignedURLForExistedKey(ctx context.Context, key string, duration time.Duration) (string, error)
@@ -128,7 +129,6 @@ type PutHeaderOption struct {
 }
 
 func (o *PutHeaderOption) ToAliCloudOptions() []oss.Option {
-
 	options := make([]oss.Option, 0)
 	if o.ContentDisposition != nil {
 		options = append(options, oss.ContentDisposition(*o.ContentDisposition))
@@ -152,7 +152,6 @@ func (o *PutHeaderOption) ToAliCloudOptions() []oss.Option {
 }
 
 func (o *PutHeaderOption) ToTencentCloudOptions() *cos.PresignedURLOptions {
-
 	opt := &cos.PresignedURLOptions{
 		Query:  &url.Values{},
 		Header: &http.Header{},
