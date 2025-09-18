@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/byte-power/gorich/utils"
-	"github.com/go-redis/redis/v8"
 	"time"
+
+	"github.com/byte-power/gorich/utils"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/byte-power/gorich/cloud"
 )
