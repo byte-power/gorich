@@ -238,7 +238,7 @@ func (c *BaseRedisQueueConsumer) getPendingMessages(ctx context.Context, withCon
 
 	pendingIds := make([]string, 0)
 	for _, item := range pendingResults {
-		if item.Idle <= idle {
+		if item.Idle >= idle {
 			pendingIds = append(pendingIds, item.ID)
 		}
 	}
