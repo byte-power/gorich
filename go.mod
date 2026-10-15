@@ -18,6 +18,7 @@ require (
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.278
 	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/ses v1.0.278
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.31
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
